@@ -1,0 +1,6 @@
+
+1) unselect on ctrl+click
+2) rework PP clip-path or highlighting
+3) saving image on 'saveState'
+4) show saving process
+5) 

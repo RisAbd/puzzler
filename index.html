@@ -1,0 +1,1448 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Clip image</title>
+  <link rel="icon" type="favicon" href="https://lelkek.tk/alphabet/favicon.ico">
+
+  <script src='https://unpkg.com/panzoom@9.4.0/dist/panzoom.min.js'></script>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <svg class="menu-opener" width="70" height="70">
+    <rect width="50" height="5" x="10" y="15" />
+    <rect width="50" height="5" x="10" y="30" />
+    <rect width="50" height="5" x="10" y="45" />
+  </svg>
+  <div class="controls-and-images">
+    <form id="controls">
+      <label>src:
+        <input type="file" name="src">
+      </label>
+      <hr>
+      <label><samp>W</samp> × <samp>H</samp>:
+        <input type="number" name="width" value="8">
+        <input type="number" name="height" value="5">
+      </label>
+      <hr>
+      <label>scale:
+        <input name="puzzle-scale" type="range" min="0.3" max="1.0" step="0.05" value="0.6">
+      </label>
+      <hr>
+      <label>allow rotation:
+        <input type="checkbox" checked name="allow-rotation">
+      </label>
+      <hr>
+      <label>bg-color:
+        <input type="color" name="bg-color" value="#ffffff">
+      </label>
+      <input id="sounds" type="checkbox" checked name="sounds">
+      <label for="sounds">sounds:</label>
+    </form>
+    <form id="previous-images" title="Drag images over controls form">
+      <img src="./test-img__map.png">
+      <img src="./test-img2__sugar.png">
+    </form>
+  </div>
+
+  <div id="grid-canvas-container">
+    <canvas id="grid-canvas" width="700" height="500"></canvas>
+    <div id="puzzle-pieces-container"></div>
+    <img id="puzzle-image">
+    <div style="display: none;">
+      <audio id="rotate-sound" src="k-tamga-suli.ogg"></audio>
+      <!-- <audio id="clutch-sound" src="tyrk-abd.ogg"></audio> -->
+      <audio id="clutch-sound" src="jspuzzles-click.mp3"></audio>
+      <audio id="win-sound" src="anime-wow-sound-effect.mp3"></audio>
+    </div>
+    <div id="area-select"></div>
+  </div>
+
+  <br>
+
+  <script type="text/javascript">
+
+    function randomColor(a) {
+      const r = Math.round(Math.random() * 256);
+      const g = Math.round(Math.random() * 256);
+      const b = Math.round(Math.random() * 256);
+      if (!a) {
+        a = Math.random();
+      }
+      return `rgba(${r}, ${g}, ${b}, ${a})`;
+    }
+
+    function line(s, e, ...args) {
+      return {type: 'line', s, e, color: randomColor(1.0), args};
+    }
+
+    function bezierCurve(s, cp1, cp2, e, d = 0, ...args) {
+      return {type: 'bezierCurve', s, cp1, cp2, e, color: randomColor(1.0), d, args};
+    }
+
+    function genPuzzleSide(s, e, sideAxis, dir, tabHeight, size, tilt=0) {
+      const {x: sx, y: sy} = s, {x: ex, y: ey} = e;
+      dir = (dir === 1) ? -1 : 1;
+      const magicK1 = 0.75, magicK2 = 0.7;
+
+      let m, cp1_1, cp2_1, cp1_2, cp2_2;
+
+      if (sideAxis === 1) {
+        const diff = ex-sx;
+        const {x: mx, y: my} = m = {x: sx+(diff/2), y: sy+(dir*tabHeight)}
+        cp1_1 = {x: sx+(diff*magicK1), y: sy-(dir*tabHeight*magicK2)};
+        cp2_1 = {x: sx+(diff/2)-(diff/2*size), y: sy+(dir*tabHeight)};
+        cp1_2 = {x: mx+(diff/2*size), y: my};
+        cp2_2 = {x: ex-(diff*magicK1), y: ey-(dir*tabHeight*magicK2)};
+      } else {
+        const diff = ey-sy;
+        const {x: mx, y: my} = m = {x: sx+(dir*tabHeight), y: sy+(diff/2)};
+        cp1_1 = {x: sx-(dir*tabHeight*magicK2), y: sy+(diff*magicK1)};
+        cp2_1 = {x: sx+(dir*tabHeight), y: sy+(diff/2)-(diff/2*size)};
+        cp1_2 = {x: mx, y: my+(diff/2*size)};
+        cp2_2 = {x: ex-(dir*tabHeight*magicK2), y: ey-(diff*magicK1)};
+      }
+
+      cp2_1.y += tilt;
+      cp1_2.y -= tilt;
+
+      return [
+        bezierCurve(s, cp1_1, cp2_1, m),
+        bezierCurve(m, cp1_2, cp2_2, e),
+      ];
+    }
+
+    function generateReversedLines(l) {
+      return l.slice().reverse().map(l => {
+        switch (l.type) {
+          case 'line': {
+            return {...l, s: l.e, e: l.s};
+          };
+          case 'bezierCurve': {
+            return {...l, s: l.e, e: l.s, cp1: l.cp2, cp2: l.cp1};
+          };
+          default: {
+            throw new Error('unknown line type:', l);
+          }
+        }
+      });
+    }
+
+    function drawLines(ctx, lines, moveTo = true) {
+      if (moveTo) {
+        ctx.moveTo(lines[0].s.x, lines[0].s.y);
+      }
+      lines.forEach((ln, i) => {
+        switch (ln.type) {
+          case 'line': {
+            ctx.lineTo(ln.e.x, ln.e.y);
+            break;
+          }
+          case 'bezierCurve': {
+            ctx.bezierCurveTo(ln.cp1.x, ln.cp1.y,
+                              ln.cp2.x, ln.cp2.y,
+                              ln.e.x, ln.e.y);
+            break;
+          }
+          default: {
+            throw new Error();
+          }
+        }
+      });
+    }
+
+    function convertLinesToSVG(lines) {
+      return `M ${lines[0].s.x} ${lines[0].s.y} ${
+        lines.map(l => {
+          switch (l.type) {
+            case 'line': {
+              return `L ${l.e.x} ${l.e.y}`;
+            }
+            case 'bezierCurve': {
+              return `C ${l.cp1.x} ${l.cp1.y} ${l.cp2.x} ${l.cp2.y} ${l.e.x} ${l.e.y}`;
+            }
+          }
+        }).join(' ')
+      } Z`;
+    }
+
+    const numberValue = s => +[...s].filter(ch => '0123456789-.'.includes(ch)).join('');
+    const parseRDeg = el => {
+      const v = numberValue(el.style.getPropertyValue('--rotation'));
+      // console.log(el.id, el.style.getPropertyValue('--rotation'), '->', v)
+      return v;
+    }
+
+
+    function rotateCells(center, centerRotation, cells, ppHeight, ppWidth) {
+
+      // function _printMatrix(m) {
+      //   console.log(m.map(l => {
+      //     return l.map(i => {
+      //       return `${i ? i.innerText ? i.innerText : 'x' :  '-'}`
+      //     }).join(' ');
+      //   }).join('\n'));
+      // }
+
+      let delta = 0;
+      // let ppWidth = +center.dataset.ppWidth,
+      //       ppHeight = +center.dataset.ppHeight;
+      if ([90, 270].includes(centerRotation%360)) {
+        [ppWidth, ppHeight] = [ppHeight, ppWidth];
+      }
+      const [cx, cy] = [center.offsetLeft / ppWidth, center.offsetTop / ppHeight].map(Math.round);
+      cells.forEach(el => {
+        if (el === center) return;
+        const [x, y] = [el.offsetLeft / ppWidth, el.offsetTop / ppHeight].map(Math.round);
+        const [xDelta, yDelta] = [cx - x, cy - y].map(Math.abs)
+        if (delta < xDelta) {
+          delta = xDelta;
+        }
+        if (delta < yDelta) {
+          delta = yDelta;
+        }
+      });
+      const mSize = delta*2+1;
+      const m = new Array(mSize).fill(0).map(x => Array(mSize).fill(null));
+      m[delta][delta] = center;
+
+      cells.forEach(el => {
+        if (el === center) return;
+
+        const [x, y] = [el.offsetLeft / ppWidth, el.offsetTop / ppHeight].map(Math.round);
+        // console.log(el.id, delta, x, y);
+        // console.log(delta, y, x, m);
+        m[delta-(cy-y)][delta-(cx-x)] = el;
+      });
+
+      const degrees = -90;
+
+      let cmds;
+      switch(degrees) {
+        case 90: {
+          cmds = 'TRy';
+          break;
+        }
+        case 270:
+        case -90: {
+          cmds = 'TRx';
+          break;
+        }
+        case 180: {
+          cmds = 'RyRx';
+          break;
+        }
+        default: {
+          throw new Error();
+        }
+      }
+
+      const mhl = Math.floor(m.length/2);
+      for (let k = 0; k < cmds.length; k++) {
+        // console.log(k, cmds[k] === 'R' ? cmds.slice(k, k+2) : cmds[k]);
+        switch(cmds[k]) {
+          case 'T': {
+            for (let i = 0; i < m.length; i++) {
+              for (let j = 0; j < i; j++) {
+                [m[i][j], m[j][i]] = [m[j][i], m[i][j]];
+              }
+            }
+            break;
+          }
+          case 'R': {
+            const axis = cmds[++k];
+            if (axis === 'y') {
+              m.reverse();
+            } else if (axis === 'x') {
+              for (let i = 0; i < mhl; i++) {
+                for (let j = 0; j < m.length; j++) {
+                  [m[j][i], m[j][m.length-i-1]] = [m[j][m.length-i-1], m[j][i]];
+                }
+              }
+            }
+
+          }
+        }
+      }
+
+      [ppWidth, ppHeight] = [ppHeight, ppWidth];
+      const newRotation = centerRotation + 90;
+      console.log()
+      m.forEach((l, j) => {
+        l.forEach((item, i) => {
+          if (item === null) return;
+          item.style.top = `${center.offsetTop + (j-mhl)*ppHeight}px`;
+          item.style.left = `${center.offsetLeft + (i-mhl)*ppWidth}px`;
+          item.style.setProperty('--rotation', `${newRotation}deg`)
+          // item.style['--rotation'] = `${newRotation}deg`;
+          // item.style.transform = `rotate(${newRotation}deg)`;
+        });
+      });
+    }
+
+    let globalPPZIndex = 2;
+    let globalGroupId = 1;
+    function makePuzzlePieceDraggable(ppEl, {rotationAllowed = true, sounds = true} = {}) {
+      const ppSize = () => [+ppEl.parentElement.dataset.ppHeight, +ppEl.parentElement.dataset.ppWidth];
+      let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0, pos5 = 0, pos6 = 0;
+      let selectedEls = [];
+      ppEl.onmousedown = onMouseDown;
+      // ppEl.onclick = onClick;
+      if (rotationAllowed) {
+        ppEl.oncontextmenu = onRightClick;
+      }
+
+      function onMouseDown(e) {
+        if (e.shiftKey || e.altKey) {
+          return;
+        }
+        if (!e.ctrlKey && !ppEl.classList.contains('selected')) {
+          clearSelection();
+        }
+
+
+        // ppEl.style.zIndex = globalPPZIndex++;
+        select(ppEl);
+
+        // todo: kostyl (see: mouse move when selecting area)
+        ppEl.parentElement.querySelectorAll('.selected').forEach(el => { 
+          selectByGroup(el.dataset.group);
+        });
+
+        const zIndex = globalPPZIndex++;
+        selectedEls = Array.from(ppEl.parentElement.querySelectorAll('.selected')).map(el => { 
+          el.style.zIndex = zIndex;
+          return el
+        });
+
+        e = e || window.event;
+        e.preventDefault();
+        e.stopPropagation();
+        // get the mouse cursor position at startup:
+        pos3 = e.clientX;
+        pos4 = e.clientY;
+        pos5 = e.layerX;
+        pos6 = e.layerY;
+        document.onmouseup = onMouseUp;
+        // call a function whenever the cursor moves:
+        document.onmousemove = onMouseMove;
+      }
+
+      function onRightClick(e) {
+        if (!e.ctrlKey) {
+          clearSelection({exclude: [ppEl, ...ppEl.parentElement.querySelectorAll(`[data-group="${ppEl.dataset.group}"]`)]});
+        }
+        if (sounds()) {
+          rotateSoundEl.stop();
+          rotateSoundEl.play();
+        }
+
+        const centerRotation = parseRDeg(ppEl);
+        if (ppEl.dataset.group) {
+          const groupMembers = Array.from(
+            ppEl.parentElement
+            .querySelectorAll(`[data-group="${ppEl.dataset.group}"]`)
+          );
+          rotateCells(ppEl, centerRotation, groupMembers, ...ppSize());
+          // console.log('rotate.changes:', changes);
+        } else {
+          console.log('kek', ppEl.id, centerRotation, centerRotation + 90 + 'deg');
+          const newRotation = centerRotation + 90;
+
+          e.target.style.setProperty('--rotation', `${newRotation}deg`);
+          // e.target.style['--rotation'] = `${newRotation}deg`;
+          // e.target.style.transform = newRotation;
+        }
+        e.stopPropagation();
+        return false;
+      }
+
+      function onMouseMove(e) {
+        e = e || window.event;
+        e.preventDefault();
+        // console.log(e);
+        // console.log(document.elementFromPoint(e.clientX, e.clientY));
+        // calculate the new cursor position:
+        const { scale } = pzGCC.getTransform();
+        pos1 = (pos3 - e.clientX) / scale;
+        pos2 = (pos4 - e.clientY) / scale;
+        pos3 = e.clientX;
+        pos4 = e.clientY;
+        // set the element's new position:
+        // ppEl.style.top = (ppEl.offsetTop - pos2) + "px";
+        // ppEl.style.left = (ppEl.offsetLeft - pos1) + "px";
+
+        selectedEls.forEach(el => {
+            // if (el === ppEl) {
+            //   // do not add delta to same pp
+            //   return;
+            // }
+            // console.log(el.dataset, el);
+            el.style.top = `${(el.offsetTop - pos2)}px`;
+            el.style.left = `${(el.offsetLeft - pos1)}px`;
+          });
+        // const { group } = ppEl.dataset;
+
+        // if (group) {
+        //   ppEl.parentElement
+        //     .querySelectorAll(`[data-group="${group}"], .selected`)
+        //     .forEach(el => {
+        //       if (el === ppEl) {
+        //         // do not add delta to same pp
+        //         return;
+        //       }
+        //       // console.log(el.dataset, el);
+        //       el.style.top = `${(el.offsetTop - pos2)}px`;
+        //       el.style.left = `${(el.offsetLeft - pos1)}px`;
+        //     });
+        // } else {
+        //   // console.log('not in group', ppEl);
+        // }
+      }
+
+      function onMouseUp() {
+        // stop moving when mouse button is released:
+        document.onmouseup = null;
+        document.onmousemove = null;
+
+        // 'pp:{x}:{y}'
+
+        const errorDelta = 10;
+
+        let [ppHeight, ppWidth] = ppSize();
+
+        const groupMembers = ppEl.parentElement
+          .querySelectorAll(`[data-group="${ppEl.dataset.group}"]`);
+
+        const itGroupMembers = (groupMembers.length === 0 ? [ppEl] : Array.from(groupMembers));
+        // console.log(itGroupMembers);
+
+        itGroupMembers.forEach(el => {
+          const [_, x, y] = el.id.split(':').map(Number);
+
+          const elRotation = parseRDeg(el);
+
+          // console.log(el);
+          [
+            // normal orientation
+            [0, 0, -1, 0, -ppHeight, 'top'],
+            [0, -1, 0, -ppWidth, 0, 'left'],
+            [0, 0, 1, 0, ppHeight, 'bottom'],
+            [0, 1, 0, ppWidth, 0, 'right'],
+            // 90deg
+            [90, 0, -1, ppHeight, 0, 'top'],
+            [90, -1, 0, 0, -ppWidth, 'left'],
+            [90, 0, 1, -ppHeight, 0, 'bottom'],
+            [90, 1, 0, 0, ppWidth, 'right'],
+            // 180deg
+            [180, 0, -1, 0, ppHeight, 'top'],
+            [180, -1, 0, ppWidth, 0, 'left'],
+            [180, 0, 1, 0, -ppHeight, 'bottom'],
+            [180, 1, 0, -ppWidth, 0, 'right'],
+            // 270deg
+            [270, 0, -1, -ppHeight, 0, 'top'],
+            [270, -1, 0, 0, ppWidth, 'left'],
+            [270, 0, 1, ppHeight, 0, 'bottom'],
+            [270, 1, 0, 0, -ppWidth, 'right'],
+
+          ].forEach(([rotation, dix, diy, hOffset, vOffset, side]) => {
+
+
+            const siblingPP = el.parentElement.querySelector(`#pp\\:${x+dix}\\:${y+diy}`);
+            if (siblingPP === null) {
+              return;
+            }
+
+            const siblingPPRotation = parseRDeg(siblingPP);
+
+            const siblingPPGroup = siblingPP.dataset.group;
+            const currentPPGroup = el.dataset.group;
+
+            if (
+                siblingPPGroup
+                && currentPPGroup
+                && siblingPPGroup === currentPPGroup
+            ) {
+              return;
+            }
+            if (
+              siblingPPRotation % 360 === rotation && elRotation % 360 === rotation
+              && ((Math.abs(el.offsetLeft - siblingPP.offsetLeft + hOffset)) < errorDelta)
+              && ((Math.abs(el.offsetTop - siblingPP.offsetTop + vOffset)) < errorDelta)
+            ) {
+
+              if (sounds()) {
+                clutchSoundEl.stop();
+                clutchSoundEl.play();
+              }
+
+              let group;
+              if (siblingPPGroup && !currentPPGroup) {
+                group = el.dataset.group = siblingPPGroup;
+              } else if (currentPPGroup && !siblingPPGroup) {
+                group = siblingPP.dataset.group = currentPPGroup;
+              } else if (!currentPPGroup && !siblingPPGroup) {
+                group = siblingPP.dataset.group = el.dataset.group = globalGroupId++;
+              } else if (siblingPPGroup && currentPPGroup) {
+                group = siblingPPGroup;
+                itGroupMembers.forEach(el => {el.dataset.group = siblingPPGroup});
+              } else {
+                throw new Error();
+              }
+
+              selectByGroup(group);
+
+              // console.log('linked:', el.id, '+', siblingPP.id, side)
+              el.classList.add('linked');
+              siblingPP.classList.add('linked');
+
+              // el.style.top = `${siblingPP.offsetTop-vOffset}px`;
+              // el.style.left = `${siblingPP.offsetLeft-hOffset}px`;
+
+              const topOffsetToMove = numberValue(el.style.top) - (siblingPP.offsetTop-vOffset);
+              const leftOffsetToMove = numberValue(el.style.left) - (siblingPP.offsetLeft-hOffset);
+
+              siblingPP.style.zIndex = el.style.zIndex;
+              itGroupMembers.forEach(el => {
+                // el.style.zIndex = el.style.zIndex;
+                el.style.top = `${numberValue(el.style.top) - topOffsetToMove}px`;
+                el.style.left = `${numberValue(el.style.left) - leftOffsetToMove}px`;
+              });
+            } else {
+              // console.log(`pp to ${side} not found`)
+            }
+          });
+        });
+
+        const children = ppEl.parentElement.children;
+        let complete = true;
+        for (let i = 0; i < children.length; i++) {
+          if (!ppEl.dataset.group || children[i].dataset.group !== ppEl.dataset.group) {
+            complete = false;
+            break;
+          }
+        }
+        if (complete) {
+          imgEl.classList.add('completed');
+          if (sounds() && !winSoundEl.dataset.played) {
+            winSoundEl.play();
+            winSoundEl.volume = 0.4;
+            winSoundEl.dataset.played = 1;
+          }
+        }
+      }
+    }
+
+    const clutchSoundEl = document.getElementById('clutch-sound');
+    clutchSoundEl.__proto__.stop = function () {this.pause(); this.currentTime = 0;}
+    const rotateSoundEl = document.getElementById('rotate-sound');
+    const winSoundEl = document.getElementById('win-sound');
+
+    const gridCanvasContainer = document.getElementById('grid-canvas-container');
+    const gridCanvas = document.getElementById('grid-canvas');
+    const slicerCanvas = document.createElement('canvas');
+    const imgEl = document.getElementById('puzzle-image');
+    const puzzlePiecesContainer = document.getElementById('puzzle-pieces-container');
+
+    const controlsForm = document.getElementById('controls');
+    const previousImagesForm = document.getElementById('previous-images');
+    const areaSelectEl = document.getElementById('area-select');
+
+
+    const SAVE_STATE_KEY = 'save-state';
+
+    function saveState() {
+      const { x, y, scale: zoom } = pzGCC.getTransform();
+      const data = { 
+        seedString: currentSeedString, 
+        panzoom: { x, y, zoom }, 
+        ppInfo: Array.from(puzzlePiecesContainer.children).map(el => {
+          const { id, offsetTop, offsetLeft } = el;
+          return {
+            id, offsetTop, offsetLeft,
+            rotation: parseRDeg(el),
+            group: el.dataset.group,
+            selected: el.classList.contains('selected'),
+          };
+        }),
+      };
+      localStorage.setItem(SAVE_STATE_KEY, JSON.stringify(data));
+    }
+
+    function restoreState() {
+      const savedState = localStorage.getItem(SAVE_STATE_KEY);
+      if (!savedState) return;
+      const { seedString, ppInfo = [], panzoom, } = JSON.parse(savedState);
+      currentSeedString = seedString;
+      cutImageToPieces({ seedString });
+      ppInfo.forEach(({ id, rotation, offsetTop, offsetLeft, group, selected }) => {
+        const ppEl = puzzlePiecesContainer.querySelector(`#${id.replaceAll(':', '\\:')}`);
+        Object.assign(ppEl.style, {
+          top: `${offsetTop}px`,
+          left: `${offsetLeft}px`,
+        });
+        ppEl.style.setProperty('--rotation', `${rotation}deg`)
+        if (group) ppEl.dataset.group = group;
+        if (selected) ppEl.classList.add('selected');
+      });
+      initPanzoom(panzoom);
+    }
+
+    document.addEventListener('DOMContentLoaded', restoreState);
+
+    gridCanvasContainer.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+    });
+
+    function clearSelection({ exclude = [] } = {}) {
+      Array.from(puzzlePiecesContainer.children)
+        .forEach(ppEl => { !exclude.includes(ppEl) && ppEl.classList.remove('selected'); });
+    }
+    function selectAll({ exclude = [] } = {}) {
+      Array.from(puzzlePiecesContainer.children)
+        .forEach(ppEl => { !exclude.includes(ppEl) && ppEl.classList.add('selected'); });
+    }
+    function select(ppEl, group = true) {
+      ppEl.classList.add('selected');
+      if (group && ppEl.dataset.group) {
+        puzzlePiecesContainer.querySelectorAll(`[data-group="${ppEl.dataset.group}"]`).forEach(el => { el.classList.add('selected'); });
+      }
+    }
+    // todo:
+    function deselect(ppEl, group = true) {
+      ppEl.classList.remove('selected');
+      if (group && ppEl.dataset.group) {
+        puzzlePiecesContainer.querySelectorAll(`[data-group="${ppEl.dataset.group}"]`).forEach(el => { el.classList.remove('selected'); });
+      }
+    }
+    function selectByGroup(group) {
+      if (!group) return;
+      puzzlePiecesContainer.querySelectorAll(`[data-group="${group}"]`).forEach(el => { el.classList.add('selected'); });
+    }
+
+    const selectAreaValues = {};
+    gridCanvasContainer.addEventListener('mousedown', function (e) {
+      if (e.target !== gridCanvasContainer || e.ctrlKey) return;
+      if (!e.ctrlKey) {
+        clearSelection();
+      }
+      gridCanvasContainer.classList.add('area-selecting');
+      const { layerY: y, layerX: x } = e;
+      Object.assign(selectAreaValues, {
+        start: {y, x},
+      });
+      Object.assign(areaSelectEl.style, {
+        top: `${y}px`,
+        left: `${x}px`,
+        bottom: '',
+        right: '',
+      });
+      e.preventDefault();
+    });
+
+    gridCanvasContainer.addEventListener('mousemove', function (e) {
+      if (!selectAreaValues.start) return;
+      const { layerY: y, layerX: x } = e;
+      const { clientHeight: ch, clientWidth: cw } = gridCanvasContainer;
+      const { x: sx, y: sy } = selectAreaValues.start;
+      const top = y > sy ? sy : y, 
+            left = x > sx ? sx : x,
+            bottom = y > sy ? ch-y : ch-sy,
+            right = x > sx ? cw-x : cw-sx;
+      Object.assign(areaSelectEl.style, {
+        top: `${top}px`,
+        left: `${left}px`,
+        bottom: `${bottom}px`,
+        right: `${right}px`,
+      });
+      const { top: saTop, left: saLeft, bottom: saBottom, right: saRight } = areaSelectEl.getBoundingClientRect();
+      const checkIsInside = (el) => {
+        const { top: ppTop, left: ppLeft, bottom: ppBottom, right: ppRight, width, height } = el.getBoundingClientRect();
+        const wMargin = width * 0.2, hMargin = height * 0.2;
+        return !(ppLeft > saRight-wMargin || ppTop > saBottom-hMargin || ppRight < saLeft+wMargin || ppBottom < saTop+hMargin);
+      };
+      Array.from(puzzlePiecesContainer.children).forEach(ppEl => {
+        if (checkIsInside(ppEl)) {
+          select(ppEl);
+        } else {
+          deselect(ppEl, false);
+          if (Array.from(ppEl.parentElement.querySelectorAll(`[data-group="${ppEl.dataset.group}"]`)).filter(checkIsInside).length > 0) {
+            select(ppEl, false);
+          }
+        }
+      })
+    });
+    gridCanvasContainer.addEventListener('mouseup', function (e) {
+      kek = [];
+      selectAreaValues.start = undefined;
+      gridCanvasContainer.classList.remove('area-selecting');
+    });
+
+    function initPanzoom({ x, y, zoom } = {}) {
+      if (pzGCC) pzGCC.dispose();
+
+      pzGCC = panzoom(puzzlePiecesContainer, {
+        beforeWheel: function (e) {
+          return false;
+          // return !e.ctrlKey;
+        },
+        beforeMouseDown: function (e) {
+          return !e.ctrlKey;
+          // return e.target.matches('#puzzle-pieces-container > img');
+        },
+
+        zoomDoubleClickSpeed: 1, 
+        zoomSpeed: 0.065,
+
+        initialX: x,
+        initialY: y,
+        initialZoom: zoom,
+      });
+      pzGCC.on('panstart', function (e) {
+        gridCanvasContainer.classList.add('show-grabbing');
+      });
+      pzGCC.on('panend', function (e) {
+        gridCanvasContainer.classList.remove('show-grabbing');
+      });
+    }
+
+    let pzGCC;
+
+    initPanzoom();
+
+    // gridCanvasContainer.addEventListener('contextmenu', function (e) {
+    //   // const {x, y} = e;
+    //   if (puzzlePiecesContainer.children.length === 0) {
+    //     return;
+    //   }
+    //   const {pageX: x, pageY: y} = e;
+    //   console.log(e, x, y);
+    //   const nearestChildren = Array.from(puzzlePiecesContainer.children).reduce((aEl, bEl) => {
+    //     if (aEl === null) return bEl;
+    //     const aSides = [x - (aEl.offsetLeft+(aEl.offsetWidth/2)), y - (aEl.offsetTop+(aEl.offsetHeight/2))];
+    //     console.log(aSides);
+    //     const minA = aSides.map(Math.abs).reduce((a, b) => (a !== null && a < b) ? a : b, null);
+    //     const bSides = [x - (bEl.offsetLeft+(bEl.offsetWidth/2)), y - (bEl.offsetTop+(bEl.offsetHeight/2))];
+    //     console.log(bSides);
+    //     const minB = bSides.map(Math.abs).reduce((a, b) => (a !== null && a < b) ? a : b, null);
+    //     console.log(minA, minB);
+    //     return minA < minB ? aEl : bEl;
+    //   }, null);
+    //   console.log(nearestChildren);
+    //   nearestChildren.dispatchEvent(new CustomEvent('contextmenu'));
+    //   e.preventDefault();
+    // });
+
+    previousImagesForm.addEventListener('click', function (e) {
+      if (e.target.tagName !== 'IMG') {
+        return;
+      }
+      imgEl.src = e.target.src;
+    });
+
+    controlsForm.addEventListener('drop', function (e) {
+      e.target.classList.remove('dragged-over');
+      e.preventDefault();
+      // console.log(e);
+      const imgSrc = e.dataTransfer.getData('URL');
+      if (imgSrc) {
+        imgEl.src = imgSrc;
+      } else {
+        imgEl.src = URL.createObjectURL(e.dataTransfer.items[0].getAsFile());
+      }
+    });
+    controlsForm.addEventListener('dragover', function (e) {
+      e.preventDefault();
+    });
+    controlsForm.addEventListener('dragenter', (e) => e.target.classList.add('dragged-over'));
+    controlsForm.addEventListener('dragexit', (e) => e.target.classList.remove('dragged-over'));
+
+    controlsForm.addEventListener('change', function (e) {
+      // console.log(e, e.target.value);
+      if (e.target.name === 'src') {
+        imgEl.src = '';
+        console.log(e.target.files);
+        const file = e.target.files[0];
+        const url = URL.createObjectURL(file)
+        imgEl.src = url;
+        if (Array.from(previousImagesForm.children).filter(img => img.dataset.name === file.name).length === 0) {
+          const img = document.createElement('img');
+          img.dataset.name = file.name;
+          img.src = url;
+          previousImagesForm.appendChild(img);
+        }
+      } else if (
+        (e.target.name === 'width'
+          || e.target.name === 'height')
+        && +e.target.value < 2) {
+          e.target.value = 2;
+          return;
+      } else if (e.target.name === 'bg-color') {
+        gridCanvasContainer.style.backgroundColor = e.target.value;
+        document.body.style.backgroundColor = controlsForm['bg-color'].value;
+      } else if (e.target.name === 'sounds') {
+        //
+      } else {
+        cutImageToPieces(e);
+      }
+    });
+
+    window.addEventListener('keydown', function (e) {
+      if (e.keyCode === 16) {
+        // shiftKey
+        imgEl.classList.add('visible');
+      } else if (e.keyCode === 17) {
+        // ctrlKey
+        gridCanvasContainer.classList.add('show-grab');
+      } else if (e.keyCode === 65 && e.ctrlKey) {
+        // ctrl + A
+        selectAll({exclude: Array.from(gridCanvasContainer.querySelectorAll('#puzzle-pieces-container.show-edge-pieces > img:not(.edge-piece)'))});
+        e.preventDefault();
+      } else if (e.keyCode === 72 && e.ctrlKey) {
+        // ctrl + H
+        puzzlePiecesContainer.classList.toggle('show-edge-pieces');
+        if (puzzlePiecesContainer.classList.contains('show-edge-pieces')) {
+          Array.from(puzzlePiecesContainer.querySelectorAll('img:not(.edge-piece)')).forEach(el => deselect(el, false));
+        }
+        e.preventDefault();
+      } else if (e.keyCode === 83 && e.ctrlKey) {
+        // ctrl + S
+        saveState(e);
+        e.preventDefault();
+      }
+    });
+    window.addEventListener('keyup', function (e) {
+      if (e.keyCode === 16) {
+        // shift
+        imgEl.classList.remove('visible');
+      } else if (e.keyCode === 17) {
+        // ctrl
+        gridCanvasContainer.classList.remove('show-grab');
+      }
+    });
+
+    function cyrb128(str) {
+      let h1 = 1779033703, h2 = 3144134277,
+          h3 = 1013904242, h4 = 2773480762;
+      for (let i = 0, k; i < str.length; i++) {
+          k = str.charCodeAt(i);
+          h1 = h2 ^ Math.imul(h1 ^ k, 597399067);
+          h2 = h3 ^ Math.imul(h2 ^ k, 2869860233);
+          h3 = h4 ^ Math.imul(h3 ^ k, 951274213);
+          h4 = h1 ^ Math.imul(h4 ^ k, 2716044179);
+      }
+      h1 = Math.imul(h3 ^ (h1 >>> 18), 597399067);
+      h2 = Math.imul(h4 ^ (h2 >>> 22), 2869860233);
+      h3 = Math.imul(h1 ^ (h3 >>> 17), 951274213);
+      h4 = Math.imul(h2 ^ (h4 >>> 19), 2716044179);
+      h1 ^= (h2 ^ h3 ^ h4), h2 ^= h1, h3 ^= h1, h4 ^= h1;
+      return [h1>>>0, h2>>>0, h3>>>0, h4>>>0];
+    }
+
+    function mulberry32(a) {
+      return function() {
+        var t = a += 0x6D2B79F5;
+        t = Math.imul(t ^ t >>> 15, t | 1);
+        t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+        return ((t ^ t >>> 14) >>> 0) / 4294967296;
+      }
+    }
+
+    let currentSeedString;
+
+    function cutImageToPieces({ seedString } = {}) {
+
+      currentSeedString = seedString || Date.now().toString();
+      const seed = cyrb128(currentSeedString);
+      const random = mulberry32(seed[0]);
+
+      if (!imgEl.complete || imgEl.naturalWidth === 0) {
+        console.log('image is not loaded yet...');
+        return;
+      }
+
+      puzzlePiecesContainer.classList.remove('show-edge-pieces');
+
+      const { width: screenWidth, height: screenHeight } = window.screen;
+
+
+      const w = gridCanvas.width = imgEl.naturalWidth;
+      const h = gridCanvas.height = imgEl.naturalHeight;
+
+      const _minScale = Math.min(screenWidth/w, screenHeight/h);
+      // const puzzleScale = 1;
+      const puzzleScale = 1; // _minScale * controlsForm['puzzle-scale'].value;
+
+      gridCanvasContainer.style.setProperty('--pp-scale', puzzleScale);
+      // imgEl.style.transform = `scale(${puzzleScale})`;
+
+      // const puzzleScale = (w > screenWidth) ? (w / screenWidth) : 1;
+      // console.log(puzzleScale, w, screenWidth, screenWidth/w);
+
+      gridCanvasContainer.style.backgroundColor = controlsForm['bg-color'].value;
+      document.body.style.backgroundColor = controlsForm['bg-color'].value;
+
+      const sounds = () => controlsForm.querySelector('input[name="sounds"]').checked ? true : false;
+      const rotationAllowed = controlsForm.querySelector('input[name="allow-rotation"]').checked ? true : false;
+      const [gw, gh] = [
+        +controlsForm.querySelector('input[name="width"]').value,
+        +controlsForm.querySelector('input[name="height"]').value,
+      ];
+
+      const ctx = gridCanvas.getContext('2d');
+
+      // clearing container
+      while (puzzlePiecesContainer.firstChild) {
+        puzzlePiecesContainer.removeChild(puzzlePiecesContainer.lastChild);
+      }
+      winSoundEl.dataset.played = '';
+      imgEl.classList.remove('completed');
+      // ctx.clearRect(0, 0, gridCanvas.width, gridCanvas.height);
+      // ctx.drawImage(imgEl, 0, 0);
+
+      const gridCellWidth = w/gw, gridCellHeight = h/gh;
+      const tabHeight = (gridCellWidth + gridCellHeight) / 7.5;
+      const tabVarHeight = Math.min(gridCellWidth, gridCellHeight)*0.25;
+
+      slicerCanvas.width = gridCellWidth+tabHeight*2+tabVarHeight;
+      slicerCanvas.height = gridCellHeight+tabHeight*2+tabVarHeight;
+      const slicerCtx = slicerCanvas.getContext('2d');
+      // slicerCtx.clearRect(0, 0, slicerCanvas.width, slicerCanvas.height);
+
+      const randomShift = (m = tabVarHeight) => Math.round(random() * m - (m/2));
+
+      function side(t, s, e, ci, cj) {
+        if (
+          (t === 'top' && cj === 0)
+          || (t === 'right' && ci === gw-1)
+          || (t === 'bottom' && cj === gh-1)
+          || (t === 'left' && ci === 0)
+        ) {
+          return [line(s, e)];
+        }
+        const sideAxis = (t === 'top' || t === 'bottom') ? 1 : 2;
+        const direction = random() < 0.5 ? 1 : 2;
+        const size = 0.7;
+        const minTabHeightK = 0.8;
+        const th = tabHeight * minTabHeightK + (random() * (1.0 - minTabHeightK) * tabHeight);
+        const tilt = (random() < 0.5 ? -1 : 1) * (random() * (th/3))
+        return genPuzzleSide(s, e, sideAxis, direction, th, size, tilt);
+      }
+
+      function _recKek(o, f, k = undefined, p = undefined, i = 0) {
+        f(o, k, p, i);
+        if (Array.isArray(o)) {
+          o.forEach((item, k, p) => _recKek(item, f, k, p, i+1))
+        } else if (typeof o === 'object' && o !== null) {
+          Object.keys(o).map(k => _recKek(o[k], f, k, o, i+1));
+        }
+      }
+
+      function _incSideLine(l, dsx, dsy, dex, dey) {
+        switch (l.type) {
+          case 'line': {
+            l.s.x += dsx;
+            l.s.y += dsy;
+            l.e.x += dex;
+            l.e.y += dey;
+            break;
+          }
+          case 'bezierCurve': {
+            l.s.x += dsx;
+            l.s.y += dsy;
+
+            l.cp1.x += l.d * (dsx === 0 ? dex : dsx);
+            l.cp1.y += l.d * (dsy === 0 ? dey : dsy);
+
+            l.cp2.x += l.d * (dex === 0 ? dsx : dex);
+            l.cp2.y += l.d * (dey === 0 ? dsy : dey);
+
+            l.e.x += dex;
+            l.e.y += dey;
+            break;
+          }
+        }
+      }
+
+      function generateLinesWithOffset(lines, i, j) {
+        lines = JSON.parse(JSON.stringify(lines));
+        const xOffset = -i*gridCellWidth+tabHeight+tabVarHeight/2;
+        const yOffset = -j*gridCellHeight+tabHeight+tabVarHeight/2;
+        _recKek(lines, function (o, k, p, _i) {
+          if (k === 'y') {
+            p[k] = o+yOffset;
+          } else if (k === 'x') {
+            p[k] = o+xOffset;
+          }
+          // if (k === 's' || k === 'e' || k === 'cp1' || k === 'cp2') {
+          //   p[k] = {...o, x: o.x+xOffset, y: o.y+yOffset};
+          // }f
+        });
+        return lines;
+      }
+
+      const prevVP = {x: 0, y: 0}, prevHP = {x: 0, y: 0};
+
+      const pointsCache = {};
+      const cellsSides = {};
+
+      let allCoords = [];
+      for (let j = 0; j < gh; j++) {
+        for (let i = 0; i < gw; i++) {
+          allCoords.push([i, j]);
+        }
+      }
+      allCoords = allCoords.map(i => [i, random()-0.5]).sort(([a, ra], [b, rb]) => ra-rb).map(([i, _]) => i);
+
+      // puzzlePiecesContainer.style.transform = `scale(var(--pp-scale, 1.0))`;
+      const ppHeight = puzzlePiecesContainer.dataset.ppHeight = gridCellHeight * puzzleScale;
+      const ppWidth = puzzlePiecesContainer.dataset.ppWidth = gridCellWidth * puzzleScale;
+
+      for (let j = 0; j < gh; j++) {
+        for (let i = 0; i < gw; i++) {
+          const points = pointsCache[`${i}:${j}`] = {
+            topLeft: {
+              x: i*gridCellWidth+(i === 0 ? 0 : randomShift()),
+              y: j*gridCellHeight+(j === 0 ? 0 : randomShift()),
+            },
+            topRight: {
+              x: (i+1)*gridCellWidth+(i === gw-1 ? 0 : randomShift()),
+              y: j*gridCellHeight+(j === 0 ? 0 : randomShift()),
+            },
+            bottomRight: {
+              x: (i+1)*gridCellWidth+(i === gw-1 ? 0 : randomShift()),
+              y: (j+1)*gridCellHeight+(j === gh-1 ? 0 : randomShift()),
+            },
+            bottomLeft: {
+              x: i*gridCellWidth+(i === 0 ? 0 : randomShift()),
+              y: (j+1)*gridCellHeight+(j === gh-1 ? 0 : randomShift()),
+            },
+          };
+          if (i > 0) {
+            const cellToLeft = pointsCache[`${i-1}:${j}`];
+            points.topLeft = cellToLeft.topRight;
+            points.bottomLeft = cellToLeft.bottomRight;
+          }
+          if (j > 0) {
+            const cellToTop = pointsCache[`${i}:${j-1}`];
+            points.topLeft = cellToTop.bottomLeft;
+            points.topRight = cellToTop.bottomRight;
+          }
+          const sides = cellsSides[`${i}:${j}`] = {
+            top: (j > 0)
+              ? generateReversedLines(cellsSides[`${i}:${j-1}`].bottom)
+              : side('top', points.topLeft, points.topRight, i, j),
+            right: side('right', points.topRight, points.bottomRight, i, j),
+            bottom: side('bottom', points.bottomRight, points.bottomLeft, i, j),
+            left: (i > 0)
+              ? generateReversedLines(cellsSides[`${i-1}:${j}`].right)
+              : side('left', points.bottomLeft, points.topLeft, i, j),
+          };
+
+          const lines = [
+            ...sides.top,
+            ...sides.right,
+            ...sides.bottom,
+            ...sides.left,
+          ]
+
+          ctx.save();
+          ctx.clearRect(0, 0, gridCanvas.width, gridCanvas.height);
+          ctx.beginPath();
+          drawLines(ctx, lines);
+          ctx.closePath();
+          ctx.clip();
+          ctx.lineWidth = 0;
+          ctx.strokeStyle = 'black';  //lines[0].color;
+          ctx.drawImage(imgEl, 0, 0);
+          ctx.stroke();
+
+          slicerCtx.clearRect(0, 0, slicerCanvas.width, slicerCanvas.height);
+          slicerCtx.drawImage(gridCanvas,
+                              i*gridCellWidth-tabHeight-tabVarHeight/2,
+                              j*gridCellHeight-tabHeight-tabVarHeight/2,
+                              slicerCanvas.width,
+                              slicerCanvas.height,
+                              0, 0,
+                              slicerCanvas.width,
+                              slicerCanvas.height)
+          const puzzlePieceImg = document.createElement('img');
+          makePuzzlePieceDraggable(puzzlePieceImg, {rotationAllowed, sounds});
+          puzzlePieceImg.id = `pp:${i}:${j}`;
+          if (i === 0 || j === 0 || i === gw-1 || j === gh-1) {
+            puzzlePieceImg.classList.add('edge-piece');
+          }
+          // puzzlePieceImg.dataset.ppHeight = gridCellHeight * puzzleScale;
+          // puzzlePieceImg.dataset.ppWidth = gridCellWidth * puzzleScale;
+          // if (puzzleScale !== 1) {
+          //   puzzlePieceImg.style.setProperty('--pp-scale', puzzleScale);
+          // }
+          puzzlePieceImg.src = slicerCanvas.toDataURL();
+          const [rx, ry] = allCoords.pop();
+          puzzlePieceImg.style.top = `${ry*gridCellHeight*puzzleScale-tabHeight-tabVarHeight/2}px`;
+          puzzlePieceImg.style.left = `${rx*gridCellWidth*puzzleScale-tabHeight-tabVarHeight/2}px`;
+          const clipPathLines = generateLinesWithOffset(lines, i, j);
+          puzzlePieceImg.style.clipPath = `path("${convertLinesToSVG(clipPathLines)}")`;
+          if (rotationAllowed) {
+            const rotation = {0: 0, 1: 90, 2: 180, 3: 270}
+            puzzlePieceImg.style.setProperty('--rotation', `${rotation[Math.floor(random()*4)]}deg`);
+          }
+
+          puzzlePiecesContainer.appendChild(puzzlePieceImg);
+
+          ctx.restore();
+
+          // const t = [0, 1];
+          // if (i === t[0] && j == t[1]) {
+          //   return ;
+          // }
+        }
+      }
+
+      ctx.drawImage(imgEl, 0, 0);
+    }
+
+    imgEl.addEventListener('load', cutImageToPieces);
+
+  </script>
+
+
+  <div id="test-canvas-container" class="section-block">
+    <canvas id="test-canvas" width="500" height="500"></canvas>
+    <div draggable="true" class="test-canvas-point" id="start-point"></div>
+    <div draggable="true" class="test-canvas-point" id="end-point"></div>
+    <div draggable="true" class="test-canvas-point" id="control-point-1"></div>
+    <div draggable="true" class="test-canvas-point" id="control-point-2"></div>
+    <div draggable="true" class="test-canvas-point" id="line-start-point"></div>
+    <div draggable="true" class="test-canvas-point" id="line-end-point"></div>
+    <div class="points-info-container">
+      <pre id="points-info">
+sx: 0, sy: 0;
+cp1x: 0, cp1y: 0;
+cp2x: 0, cp2y: 0;
+ex: 0, ey: 0;
+      </pre>
+
+      <pre id="line-points-info">
+sx: 0, sy: 0;
+ex: 0, ey: 0;
+      </pre>
+
+      <form id="puzzle-tweaker">
+        <label for="side-width">width(100): </label>
+        <input id="side-width" style="width: 80px;" type="range" name="side-width" min="10" max="200" step="10" value="100">
+        <hr>
+        <label for="height">height(40): </label>
+        <input id="height" style="width: 80px;" type="range" name="height" min="10" max="100" step="5" value="40">
+        <hr>
+        <label>direction:</label>
+        <input type="radio" name="direction" value="1" checked>
+        1
+        <input type="radio" name="direction" value="2">
+        2
+        <hr>
+        <label>side:</label>
+        <input type="radio" name="side" value="h" checked>
+        hor
+        <input type="radio" name="side" value="v">
+        vert
+        <hr>
+        <label for="size">size(0.1):</label>
+        <input id="size" style="width:80px;" type="range" name="size" min="0.1" max="1.0" step="0.05" value="0.3">
+        <hr>
+        <label for="tilt">tilt(10):</label>
+        <input id="tilt" style="width:80px;" type="range" name="tilt" min="-30" max="30" step="1" value="5">
+      </form>
+    </div>
+  </div>
+
+  <br>
+
+  <script type="text/javascript">
+
+    const testCanvasContainer = document.getElementById('test-canvas-container');
+
+    const startPointEl = document.getElementById('start-point');
+    const endPointEl = document.getElementById('end-point');
+    const controlPoint1El = document.getElementById('control-point-1');
+    const controlPoint2El = document.getElementById('control-point-2');
+
+    const lineStartPointEl = document.getElementById('line-start-point');
+    const lineEndPointEl = document.getElementById('line-end-point');
+
+    const testCanvas = document.getElementById('test-canvas');
+
+    const pointInfoEl = document.getElementById('points-info');
+    const linePointInfoEl = document.getElementById('line-points-info');
+
+
+    testCanvasContainer.addEventListener('drop', function (e) {
+      e.preventDefault();
+    });
+    testCanvasContainer.addEventListener('dragover', function (e) {
+      e.preventDefault();
+      if (e.target.id !== 'test-canvas') {
+        // e.target appears to be points (bug or wtf?)
+        return;
+      }
+      const movingEl = document.getElementById(e.dataTransfer.getData('point-id'));
+      movingEl.style.top = `${e.layerY-12}px`;
+      movingEl.style.left = `${e.layerX-12}px`;
+
+      drawShapes();
+    });
+
+    function pointDragStart(e) {
+      e.dataTransfer.setData('point-id', e.target.id);
+    }
+
+    [
+      startPointEl,
+      endPointEl,
+      controlPoint1El,
+      controlPoint2El,
+      lineStartPointEl,
+      lineEndPointEl,
+    ].forEach(el => el.addEventListener('dragstart', pointDragStart));
+
+    function copyElementContentsOnClick(e) {
+      const selection = window.getSelection();
+      const range = document.createRange();
+      range.selectNodeContents(e.target);
+      selection.removeAllRanges();
+      selection.addRange(range);
+      document.execCommand('copy');
+      e.target.title = 'Copied!'
+      setTimeout(function () {
+        e.target.title = '';
+      }, 2000);
+    }
+
+    [
+      pointInfoEl,
+      linePointInfoEl,
+    ].forEach(el => el.addEventListener('click', copyElementContentsOnClick));
+
+    const puzzleTweakerForm = document.getElementById('puzzle-tweaker');
+
+    let direction = 1, height = 40, size = 0.3, sideWidth = 100, sideAxis = 1, tilt = 10;;
+    function onPuzzleTweakerChange(e) {
+      puzzleTweakerForm.querySelector('label[for="side-width"]').innerText = `width(${puzzleTweakerForm.querySelector('input[name="side-width"]').value}): `;
+      sideWidth = +puzzleTweakerForm.querySelector('input[name="side-width"]').value;
+      direction = +puzzleTweakerForm.querySelector('input[name="direction"]:checked').value;
+      sideAxis = puzzleTweakerForm.querySelector('input[name="side"]:checked').value === 'h' ? 1 : 2;
+      puzzleTweakerForm.querySelector('label[for="height"]').innerText = `height(${puzzleTweakerForm.querySelector('input[name="height"]').value}): `;
+      height = +puzzleTweakerForm.querySelector('input[name="height"]').value;
+      puzzleTweakerForm.querySelector('label[for="size"]').innerText = `size(${puzzleTweakerForm.querySelector('input[name="size"]').value}): `;
+      size = +puzzleTweakerForm.querySelector('input[name="size"]').value;
+      tilt = +puzzleTweakerForm.querySelector('input[name="tilt"]').value;
+      puzzleTweakerForm.querySelector('label[for="tilt"]').innerText = `tilt(${tilt})`;
+      drawShapes();
+    }
+    puzzleTweakerForm.addEventListener('change', onPuzzleTweakerChange);
+
+    function drawShapes() {
+
+      const ctx = testCanvas.getContext('2d');
+      ctx.clearRect(0, 0, testCanvas.width, testCanvas.height);
+
+      function drawPuzzleSide(s, e, side, dir, height=40, size=0.4, tilt=10) {
+
+        const {x: sx, y: sy} = s, {x: ex, y: ey} = e;
+        dir = (dir === 1) ? -1 : 1;
+        const magicK1 = 0.7;
+
+        let m, cp1_1, cp2_1, cp1_2, cp2_2;
+
+        if (side === 1) {
+          const diff = ex-sx;
+          const {x: mx, y: my} = m = {x: sx+(diff/2), y: sy+(dir*height)}
+          cp1_1 = {x: sx+(diff*magicK1), y: sy};
+          cp2_1 = {x: sx+(diff/2)-(diff/2*size), y: sy+(dir*height)};
+          cp1_2 = {x: mx+(diff/2*size), y: my};
+          cp2_2 = {x: ex-(diff*magicK1), y: ey};
+        } else {
+          const diff = ey-sy;
+          const {x: mx, y: my} = m = {x: sx+(dir*height), y: sy+(diff/2)};
+          cp1_1 = {x: sx, y: sy+(diff*magicK1)};
+          cp2_1 = {x: sx+(dir*height), y: sy+(diff/2)-(diff/2*size)};
+          cp1_2 = {x: mx, y: my+(diff/2*size)};
+          cp2_2 = {x: ex, y: ey-(diff*magicK1)};
+        }
+
+        ctx.beginPath();
+        ctx.moveTo(sx, sy);
+        ctx.bezierCurveTo(cp1_1.x, cp1_1.y, cp2_1.x, cp2_1.y+tilt, m.x, m.y);
+        ctx.bezierCurveTo(cp1_2.x, cp1_2.y-tilt, cp2_2.x, cp2_2.y, ex, ey);
+        ctx.stroke();
+      }
+
+      const ps = {x: 150, y: 200};
+      const pe = sideAxis === 1 ? {...ps, x: ps.x+sideWidth} : {...ps, y: ps.y+sideWidth};
+
+      drawPuzzleSide(ps, pe, sideAxis, direction, height, size, tilt);
+
+      // ctx.beginPath();
+      // const ps = {x: 200, y: 200}, pe = {x: 300, y: 200};
+      // ctx.moveTo(ps.x, ps.y);
+      // ctx.bezierCurveTo(270, 200, 220, 160, 250, 160);
+      // ctx.stroke();
+
+
+      ctx.save();
+      ctx.beginPath();
+      const bc = {
+        type: "bezierCurve",
+
+        sx: startPointEl.offsetLeft,
+        sy: startPointEl.offsetTop,
+
+        cp1x: controlPoint1El.offsetLeft,
+        cp1y: controlPoint1El.offsetTop,
+        cp2x: controlPoint2El.offsetLeft,
+        cp2y: controlPoint2El.offsetTop,
+
+        ex: endPointEl.offsetLeft,
+        ey: endPointEl.offsetTop,
+      };
+      // console.log(bc);
+      ctx.moveTo(bc.sx, bc.sy);
+      ctx.bezierCurveTo(bc.cp1x, bc.cp1y,
+                        bc.cp2x, bc.cp2y,
+                        bc.ex, bc.ey);
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = 'black';
+      ctx.stroke();
+
+      const ld = {
+        type: "line",
+
+        sx: lineStartPointEl.offsetLeft,
+        sy: lineStartPointEl.offsetTop,
+
+        ex: lineEndPointEl.offsetLeft,
+        ey: lineEndPointEl.offsetTop,
+      };
+
+      ctx.moveTo(ld.sx, ld.sy);
+      ctx.lineTo(ld.ex, ld.ey);
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = 'black';
+      ctx.stroke();
+
+
+      ctx.beginPath();
+      ctx.setLineDash([2, 4]);
+      ctx.moveTo(bc.sx, bc.sy);
+      ctx.lineTo(bc.cp1x, bc.cp1y);
+      ctx.moveTo(bc.ex, bc.ey);
+      ctx.lineTo(bc.cp2x, bc.cp2y);
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = 'gray';
+      ctx.stroke();
+
+      ctx.restore();
+
+      pointInfoEl.innerHTML = JSON.stringify(bc, null, 2);
+      linePointInfoEl.innerHTML = JSON.stringify(ld, null, 2);
+    }
+
+    onPuzzleTweakerChange(null);
+  </script>
+
+
+
+  <div id="puzzle-canvas-container" class="section-block">
+    <canvas id="puzzle-canvas" width="150" height="150"></canvas>
+
+    <img class="second-image" />
+    <img class="main-image" src="./test-img__map.png" />
+  </div>
+
+  <script>
+
+    const mainImageEl = document.querySelector('.main-image');
+
+    const puzzleCanvas = document.getElementById('puzzle-canvas');
+
+    puzzleCanvas.addEventListener('mouseover', function (e) {
+      e.target.classList.toggle('right');
+    });
+
+    mainImageEl.addEventListener('load', function (e) {
+
+      const imgNW = this.naturalWidth, imgNH = this.naturalHeight;
+      const ctx = puzzleCanvas.getContext('2d');
+      const cw = 150, ch = 150;
+
+      function drawCross() {
+        ctx.beginPath();
+        ctx.lineWidth = 2;
+        ctx.moveTo(cw/2, ch/2+20);
+        ctx.lineTo(cw/2, ch/2-20);
+        ctx.moveTo(cw/2+20, ch/2);
+        ctx.lineTo(cw/2-20, ch/2);
+        ctx.stroke();
+        ctx.closePath();
+      }
+
+      const shapeMoves = [
+        {"type": "bezierCurve", "ex": 42, "ey": 58, "cp2x": 6, "cp2y": 41, "cp1x": 6, "cp1y": 102, "sx": 42, "sy": 77},
+        {"type": "bezierCurve", "ex": 86, "ey": 18, "cp2x": 26, "cp2y": 16, "cp1x": 57, "cp1y": 30, "sx": 59, "sy": 54},
+        {"type": "bezierCurve", "ex": 107, "ey": 15, "cp2x": 126, "cp2y": 54, "cp1x": 64, "cp1y": 61, "sx": 79, "sy": 13},
+        {"type": "bezierCurve", "ex": 141, "ey": 52, "cp2x": 139, "cp2y": 21, "cp1x": 155, "cp1y": 8, "sx": 106, "sy": 16},
+        {"type": "bezierCurve", "ex": 135, "ey": 78, "cp2x": 85, "cp2y": 95, "cp1x": 100, "cp1y": 33, "sx": 135, "sy": 50},
+        {"type": "bezierCurve", "ex": 95, "ey": 113, "cp2x": 134, "cp2y": 120, "cp1x": 135, "cp1y": 118, "sx": 134, "sy": 78},
+        {"type": "bezierCurve", "ex": 68, "ey": 119, "cp2x": 44, "cp2y": 155, "cp1x": 116, "cp1y": 153, "sx": 99, "sy": 116},
+        {"type": "bezierCurve", "ex": 43, "ey": 90, "cp2x": 23, "cp2y": 139, "cp1x": 54, "cp1y": 116, "sx": 69, "sy": 125}
+      ];
+
+      ctx.beginPath();
+      shapeMoves.forEach((m, i) => {
+        if (i === 0) {
+          ctx.moveTo(m.sx, m.sy);
+        }
+        switch(m.type) {
+          case 'bezierCurve': {
+            ctx.bezierCurveTo(m.cp1x, m.cp1y,
+                              m.cp2x, m.cp2y,
+                              m.ex, m.ey
+                              );
+            break;
+          }
+          case 'line': {
+            ctx.lineTo(m.ex, m.ey);
+            break;
+          }
+          default: {
+            throw new Error('unknown move:', m);
+          }
+        }
+      })
+      ctx.closePath();
+      ctx.clip();
+
+      this.addEventListener('click', function (e) {
+        if (!e.ctrlKey) {
+          return
+        }
+        const link = document.createElement('a');
+        link.download = 'cropped.png';
+        link.href = puzzleCanvas.toDataURL();
+        link.click();
+        link.delete();
+      });
+
+      this.addEventListener('mousemove', function (e) {
+        const x = e.layerX / e.target.width;
+        const y = e.layerY / e.target.height;
+
+        ctx.drawImage(e.target, -imgNW*x+cw/2, -imgNH*y+ch);
+        drawCross();
+      });
+
+    });
+  </script>
+
+</body>
+</html>
