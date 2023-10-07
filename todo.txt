@@ -3,4 +3,10 @@
 2) rework PP clip-path or highlighting
 3) saving image on 'saveState'
 4) show saving process
-5) 
+5) debounce on area select
+6) group when merging two groups (now requires two clicks)
+7) human controls
+8) how time and stats (progress)
+9) log movements (to show some graphs later)
+10) ctrl+z (history)
+11) tipping (just for weaks)
