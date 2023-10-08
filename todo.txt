@@ -1,16 +1,18 @@
 
-v 1) unselect on ctrl+click
+	v 1) unselect on ctrl+click
 2) rework PP clip-path or highlighting
-v 3) saving image on 'saveState'
-v 3.a) save bg-color 
-v 3.b) and all other controls...
-v 3.c) and globalGroup counter and zIndex and globalZIndex counter...
-4) show saving process
-5) debounce on area select
+	v 3) saving image on 'saveState'
+	v 3.a) save bg-color 
+	v 3.b) and all other controls...
+	v 3.c) and globalGroup counter and zIndex and globalZIndex counter...
+	v 4) show saving process
+	v 5) debounce on area select - (kind of done)
 6) group when merging two groups (now requires two clicks)
 7) human controls
-8) how time and stats (progress)
+	v 8) show time and stats (progress)
 9) log movements (to show some graphs later)
 10) ctrl+z (history)
 11) tipping (just for weaks)
-12) explicit action after changing values in puzzle config 
+	v 12) explicit action after changing values in puzzle config 
+13) bug: restoring state after page reload fails sometimes
+14) clear saved state(s)

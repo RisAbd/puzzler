@@ -292,3 +292,19 @@ input#sounds:checked + label[for="sounds"]::after {
   content: "🔔";
   background-color: white;
 }
+
+
+#game-stats {
+  position: fixed;
+  left: 0px;
+  bottom: 0px;
+  color: white;
+  background-color: #333;
+  font-family: mono;
+  font-size: 0.7rem;
+  padding: 2px 5px;
+}
+
+#game-stats > span {
+  color: yellow;
+}
