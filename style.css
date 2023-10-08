@@ -7,6 +7,12 @@ body {
   display: flex;
   flex-direction: column;
 }
+body.loading {
+  cursor: wait;
+}
+body.loading > * {
+  pointer-events: none;
+}
 * {
   box-sizing: content-box;
 }
@@ -229,6 +235,10 @@ svg.menu-opener:hover + .controls-and-images,
 #controls > label > input[type="number"] {
   max-width: 60px;
 }
+#controls.values-changed > button[type="submit"] {
+  background-color: yellow;
+  font-size: 1.5rem;
+}
 #previous-images {
   display: inline-block;
   border: 1px solid black;
@@ -249,7 +259,7 @@ svg.menu-opener:hover + .controls-and-images,
   max-height: 300px;
   border: 1px solid black;
   transform: scale(var(--pp-scale, 1.0));
-/*  pointer-events: none;*/
+  pointer-events: none;
 }
 #puzzle-image.completed {
   visibility: visible;

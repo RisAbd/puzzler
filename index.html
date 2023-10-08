@@ -38,6 +38,8 @@
       </label>
       <input id="sounds" type="checkbox" checked name="sounds">
       <label for="sounds">sounds:</label>
+      <hr>
+      <button type="submit">Redraw</button>
     </form>
     <form id="previous-images" title="Drag images over controls form">
       <img src="./test-img__map.png">
@@ -292,6 +294,22 @@
         ppEl.oncontextmenu = onRightClick;
       }
 
+      let mouseMoved = false;
+      let justSelected = false;
+
+      'mousedown click mousemove mouseup contextmenu'.split(' ').forEach(eventType => {
+        ppEl.addEventListener(eventType, (e) => {
+          console.log(eventType);
+        });
+      });
+
+      ppEl.onclick = function (e) {
+        if (e.ctrlKey && !justSelected && !mouseMoved) {
+          deselect(ppEl);
+        }
+        mouseMoved = false;
+      };
+
       function onMouseDown(e) {
         if (e.shiftKey || e.altKey) {
           return;
@@ -300,14 +318,19 @@
           clearSelection();
         }
 
+        if (!ppEl.classList.contains('selected')) {
+          select(ppEl);
+          justSelected = true;
+        } else {
+          justSelected = false;
+        }
 
         // ppEl.style.zIndex = globalPPZIndex++;
-        select(ppEl);
 
-        // todo: kostyl (see: mouse move when selecting area)
-        ppEl.parentElement.querySelectorAll('.selected').forEach(el => { 
-          selectByGroup(el.dataset.group);
-        });
+        // // todo: kostyl (see: mouse move when selecting area)
+        // ppEl.parentElement.querySelectorAll('.selected').forEach(el => { 
+        //   selectByGroup(el.dataset.group);
+        // });
 
         const zIndex = globalPPZIndex++;
         selectedEls = Array.from(ppEl.parentElement.querySelectorAll('.selected')).map(el => { 
@@ -363,6 +386,7 @@
         // console.log(e);
         // console.log(document.elementFromPoint(e.clientX, e.clientY));
         // calculate the new cursor position:
+        mouseMoved = true;
         const { scale } = pzGCC.getTransform();
         pos1 = (pos3 - e.clientX) / scale;
         pos2 = (pos4 - e.clientY) / scale;
@@ -401,6 +425,7 @@
       }
 
       function onMouseUp() {
+
         // stop moving when mouse button is released:
         document.onmouseup = null;
         document.onmousemove = null;
@@ -550,36 +575,58 @@
 
 
     const SAVE_STATE_KEY = 'save-state';
+    const SAVE_STATE_IMG_KEY = 'save-state-image';
 
-    function saveState() {
+    function checkSavedStateExists() {
+      return localStorage.hasOwnProperty(SAVE_STATE_KEY) && localStorage.hasOwnProperty(SAVE_STATE_IMG_KEY);
+    }
+
+    function _saveState() {
+
       const { x, y, scale: zoom } = pzGCC.getTransform();
       const data = { 
         seedString: currentSeedString, 
-        panzoom: { x, y, zoom }, 
+        panzoom: { x, y, zoom },
+        controls: getControlsValues(),
+        globalGroupId,
+        globalPPZIndex,
         ppInfo: Array.from(puzzlePiecesContainer.children).map(el => {
-          const { id, offsetTop, offsetLeft } = el;
+          const { id, offsetTop: top, offsetLeft: left } = el;
           return {
-            id, offsetTop, offsetLeft,
+            id, top, left,
             rotation: parseRDeg(el),
             group: el.dataset.group,
             selected: el.classList.contains('selected'),
+            zIndex: el.style.zIndex,
           };
         }),
       };
+      localStorage.setItem(SAVE_STATE_IMG_KEY, gridCanvas.toDataURL());
       localStorage.setItem(SAVE_STATE_KEY, JSON.stringify(data));
     }
 
-    function restoreState() {
-      const savedState = localStorage.getItem(SAVE_STATE_KEY);
-      if (!savedState) return;
-      const { seedString, ppInfo = [], panzoom, } = JSON.parse(savedState);
+    function _restoreState() {
+      const { 
+        seedString, ppInfo = [], panzoom, 
+        controls: controlsValues,
+        globalGroupId: globalGroupIdFromState, 
+        globalPPZIndex: globalPPZIndexFromState, 
+      } = JSON.parse(localStorage.getItem(SAVE_STATE_KEY));
+
+      globalPPZIndex = globalPPZIndexFromState;
+      globalGroupId = globalGroupIdFromState;
       currentSeedString = seedString;
+
       cutImageToPieces({ seedString });
-      ppInfo.forEach(({ id, rotation, offsetTop, offsetLeft, group, selected }) => {
+
+      if (controlsValues) setControlsValues(controlsValues);
+
+      ppInfo.forEach(({ id, rotation, top, left, group, selected, zIndex }) => {
         const ppEl = puzzlePiecesContainer.querySelector(`#${id.replaceAll(':', '\\:')}`);
         Object.assign(ppEl.style, {
-          top: `${offsetTop}px`,
-          left: `${offsetLeft}px`,
+          top: `${top}px`,
+          left: `${left}px`,
+          zIndex,
         });
         ppEl.style.setProperty('--rotation', `${rotation}deg`)
         if (group) ppEl.dataset.group = group;
@@ -588,7 +635,29 @@
       initPanzoom(panzoom);
     }
 
-    document.addEventListener('DOMContentLoaded', restoreState);
+    function restoreState({ requireConfirmation = true } = {}) {
+      if (!checkSavedStateExists()) return;
+      if (requireConfirmation && checkSavedStateExists() && !confirm('Are you sure you want to restore previous saved state? (current progress will be lost)')) return;
+      const savedImageData = localStorage.getItem(SAVE_STATE_IMG_KEY);
+      document.body.classList.add('loading');
+      imgEl.src = savedImageData;
+      imgEl.onload = () => {
+        document.body.classList.remove('loading');
+        imgEl.onload = null;
+        _restoreState();
+      };
+    }
+
+    function saveState() {
+      if (checkSavedStateExists() && !confirm('You have previously saved state, are you sure you want to rewrite it?')) return;
+      document.body.classList.add('loading');
+      _saveState();
+      setTimeout(() => document.body.classList.remove('loading'), 300);
+    }
+
+    document.addEventListener('DOMContentLoaded', (e) => {
+      restoreState({ requireConfirmation: false });
+    });
 
     gridCanvasContainer.addEventListener('contextmenu', (e) => {
       e.preventDefault();
@@ -694,10 +763,11 @@
         zoomDoubleClickSpeed: 1, 
         zoomSpeed: 0.065,
 
-        initialX: x,
-        initialY: y,
         initialZoom: zoom,
       });
+      if (x !== undefined && y !== undefined) {
+        pzGCC.moveTo(x, y);
+      }
       pzGCC.on('panstart', function (e) {
         gridCanvasContainer.classList.add('show-grabbing');
       });
@@ -757,6 +827,10 @@
     controlsForm.addEventListener('dragenter', (e) => e.target.classList.add('dragged-over'));
     controlsForm.addEventListener('dragexit', (e) => e.target.classList.remove('dragged-over'));
 
+    function setBgColor(color) {
+      gridCanvasContainer.style.backgroundColor = color;
+      document.body.style.backgroundColor = color;
+    }
     controlsForm.addEventListener('change', function (e) {
       // console.log(e, e.target.value);
       if (e.target.name === 'src') {
@@ -778,13 +852,17 @@
           e.target.value = 2;
           return;
       } else if (e.target.name === 'bg-color') {
-        gridCanvasContainer.style.backgroundColor = e.target.value;
-        document.body.style.backgroundColor = controlsForm['bg-color'].value;
+        setBgColor(e.target.value);
       } else if (e.target.name === 'sounds') {
         //
       } else {
-        cutImageToPieces(e);
+        controlsForm.classList.add('values-changed');
       }
+    });
+    controlsForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      controlsForm.classList.remove('values-changed');
+      cutImageToPieces(e);
     });
 
     window.addEventListener('keydown', function (e) {
@@ -809,6 +887,12 @@
         // ctrl + S
         saveState(e);
         e.preventDefault();
+      } else if (e.keyCode === 82 && e.ctrlKey && e.shiftKey) {
+        // ctrl + shift + R
+        restoreState();
+        e.preventDefault();
+        e.stopPropagation();
+        return false;
       }
     });
     window.addEventListener('keyup', function (e) {
@@ -850,6 +934,21 @@
 
     let currentSeedString;
 
+    function getControlsValues() {
+      return {
+        width: +controlsForm["width"].value,
+        height: +controlsForm["height"].value,
+        bgColor: controlsForm["bg-color"].value,
+        rotationAllowed: controlsForm["allow-rotation"].checked,
+      };
+    }
+    function setControlsValues({ width, height, rotationAllowed, bgColor }) {
+      controlsForm["width"].value = width;
+      controlsForm["height"].value = height;
+      controlsForm["bg-color"].value = bgColor;
+      controlsForm["allow-rotation"].checked = rotationAllowed;
+    }
+
     function cutImageToPieces({ seedString } = {}) {
 
       currentSeedString = seedString || Date.now().toString();
@@ -879,15 +978,11 @@
       // const puzzleScale = (w > screenWidth) ? (w / screenWidth) : 1;
       // console.log(puzzleScale, w, screenWidth, screenWidth/w);
 
-      gridCanvasContainer.style.backgroundColor = controlsForm['bg-color'].value;
-      document.body.style.backgroundColor = controlsForm['bg-color'].value;
 
       const sounds = () => controlsForm.querySelector('input[name="sounds"]').checked ? true : false;
-      const rotationAllowed = controlsForm.querySelector('input[name="allow-rotation"]').checked ? true : false;
-      const [gw, gh] = [
-        +controlsForm.querySelector('input[name="width"]').value,
-        +controlsForm.querySelector('input[name="height"]').value,
-      ];
+
+      const { bgColor, rotationAllowed, width: gw, height: gh } = getControlsValues();
+      setBgColor(bgColor);
 
       const ctx = gridCanvas.getContext('2d');
 
