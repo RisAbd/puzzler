@@ -295,6 +295,7 @@ input#sounds:checked + label[for="sounds"]::after {
 
 
 #game-stats {
+  pointer-events: none;
   position: fixed;
   left: 0px;
   bottom: 0px;
