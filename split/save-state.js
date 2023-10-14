@@ -43,12 +43,12 @@ function _restoreState() {
   globalGroupId = globalGroupIdFromState;
   currentSeedString = seedString;
 
-  cutImageToPieces({ seedString });
-
   if (controlsValues) setControlsValues(controlsValues);
 
+  cutImageToPieces({ seedString });
+
   ppInfo.forEach(({ id, rotation, top, left, group, selected, zIndex }) => {
-    const ppEl = puzzlePiecesContainer.querySelector(`#${id.replaceAll(':', '\\:')}`);
+    const ppEl = document.getElementById(id);
     Object.assign(ppEl.style, {
       top: `${top}px`,
       left: `${left}px`,
@@ -67,12 +67,13 @@ function restoreState({ requireConfirmation = true } = {}) {
   if (requireConfirmation && checkSavedStateExists() && !confirm('Are you sure you want to restore previous saved state? (current progress will be lost)')) return;
   const savedImageData = localStorage.getItem(SAVE_STATE_IMG_KEY);
   document.body.classList.add('loading');
-  imgEl.src = savedImageData;
-  imgEl.onload = () => {
+  function evf() {
     document.body.classList.remove('loading');
-    imgEl.onload = null;
+    imgEl.removeEventListener('load', evf);
     _restoreState();
   };
+  imgEl.addEventListener('load', evf);
+  imgEl.src = savedImageData;
 }
 
 function saveState() {

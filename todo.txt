@@ -14,7 +14,7 @@
 10) ctrl+z (history)
 11) tipping (just for weaks)
 	v 12) explicit action after changing values in puzzle config 
-13) bug: restoring state after page reload fails sometimes
+	v 13) bug: restoring state after page reload fails sometimes
 14) clear saved state(s)
 	v 15) bug when moving group with hidden middle pieces that are part of edges
 16) pan behaviour (disable drag when ctrl pressed or make paning with shift or other)
@@ -24,3 +24,5 @@
 	v 20) area select not working after some error after page refresh (hint: lastArgs is null)
 	v 21) disable ctrl+H when all edges are merged together
 	v 22) add debug section
+	v 23) restore not working sometimes (load of document)
+24) rework puzzle generation moment when selecting image
