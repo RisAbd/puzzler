@@ -28,7 +28,7 @@ function throttle(ms, f, { argsType = 'last' } = {}) {
  * calls passed function every time but gives a flag when to throttle
  * as first argument.
  **/
-function halfThrottle(ms, f, { argsType = 'last' } = {}) {
+function halfThrottle(ms, f, { argsType = 'last' } = {}) { 
   let throttlePause;
   let lastArgs = null;
 
@@ -45,7 +45,7 @@ function halfThrottle(ms, f, { argsType = 'last' } = {}) {
     };
     throttlePause = true;
     setTimeout(() => {
-      f(true, ...lastArgs);
+      f(true, ...(lastArgs || args));
       throttlePause = false;
     }, ms);
   };

@@ -59,6 +59,13 @@
     </div>
     <div id="area-select"></div>
     <div id="game-stats">
+      <div class="debug">
+        x: <span id="debug-x">-</span>,
+        y: <span id="debug-y">-</span>,
+        group: <span id="debug-group">-</span>
+        selected: <span id="debug-selected">-</span><br>
+        edge: <span id="debug-edge">-</span>
+      </div>
       timer: <span id="timer">???</span>,
       progress: <span id="progress">0%</span><br>
       created at <span id="created-date"></span>
@@ -110,8 +117,16 @@
 
     function updateProgressStats() {
       const pps = Array.from(puzzlePiecesContainer.children);
-      const ppsGroupedLength = pps.reduce((acc, el) => acc + (el.dataset.group ? 1 : 0), 0);
-      progressStatsEl.innerText = `${Math.round(ppsGroupedLength / pps.length * 10000) / 100}% (${ppsGroupedLength}/${pps.length})`;
+      const ppsByXYId = pps.reduce((acc, el) => { acc[el.id] = el; return acc; }, {});
+      const { total, grouped } = pps.reduce(({total, grouped}, el, i) => {
+        const [_, x, y] = el.id.split(':').map(Number);
+        const neighbors = [`pp:${x+1}:${y}`, `pp:${x-1}:${y}`, `pp:${x}:${y+1}`, `pp:${x}:${y-1}`].map(id => ppsByXYId[id]).filter(Boolean);
+        total += neighbors.length;
+        grouped += neighbors.reduce((acc, { dataset: { group }}) => acc + (group ? group === el.dataset.group : 0), 0);
+        delete ppsByXYId[el.id];
+        return {total, grouped};
+      }, {total:0, grouped:0});
+      progressStatsEl.innerText = `${Math.round(grouped / total * 10000) / 100}% (${grouped}/${total})`;
     }
 
     gridCanvasContainer.addEventListener('contextmenu', (e) => {
@@ -172,6 +187,31 @@
         right: '',
       });
       e.preventDefault();
+    });
+
+
+    // DEBUG values
+    const debugXEl = document.getElementById('debug-x');
+    const debugYEl = document.getElementById('debug-y');
+    const debugGroupEl = document.getElementById('debug-group');
+    const debugSelectedEl = document.getElementById('debug-selected');
+    const debugEdgeEl = document.getElementById('debug-edge');
+    gridCanvasContainer.addEventListener('mousemove', function (e) {
+      if (e.target.tagName === 'IMG') { // ppEL 
+        const { id, dataset: { group }, classList } = e.target;
+        const [_, x, y] = id.split(':').map(Number);
+        debugXEl.innerText = x;
+        debugYEl.innerText = y;
+        debugGroupEl.innerText = group || '-';
+        debugSelectedEl.innerText = classList.contains('selected');
+        debugEdgeEl.innerText = classList.contains('edge-piece');
+      } else {
+        debugXEl.innerText = '-';
+        debugYEl.innerText = '-';
+        debugGroupEl.innerText = '-';
+        debugSelectedEl.innerText = '-';
+        debugEdgeEl.innerText = '-';
+      }
     });
 
     gridCanvasContainer.addEventListener('mousemove', halfThrottle(100, function (flag, e) {
@@ -349,9 +389,31 @@
         e.preventDefault();
       } else if (e.keyCode === 72 && e.ctrlKey) {
         // ctrl + H
-        puzzlePiecesContainer.classList.toggle('show-edge-pieces');
-        if (puzzlePiecesContainer.classList.contains('show-edge-pieces')) {
-          Array.from(puzzlePiecesContainer.querySelectorAll('img:not(.edge-piece)')).forEach(el => deselect(el, false));
+        const edgePPsGroups = new Set(Array.from(puzzlePiecesContainer.querySelectorAll('img.edge-piece')).map(el => el.dataset.group));
+        if (edgePPsGroups.has(undefined) || edgePPsGroups.size > 1) {
+          puzzlePiecesContainer.classList.toggle('show-edge-pieces');
+          if (puzzlePiecesContainer.classList.contains('show-edge-pieces')) {
+            const checkedGroups = [];
+            Array.from(puzzlePiecesContainer.children).forEach(el => {
+              const { group } = el.dataset;
+              if (el.classList.contains('edge-piece')) {
+                if (group) checkedGroups.push(group);
+                return;
+              };
+              if (group) {
+                if (checkedGroups.includes(group)) return;
+                el.classList.remove('hidden');
+                const groupPPs = Array.from(puzzlePiecesContainer.querySelectorAll(`[data-group="${group}"]`))
+                if (groupPPs.find(el => el.classList.contains('edge-piece'))) return;
+                deselect(el, group);
+                checkedGroups.push(group);
+                groupPPs.forEach(el => el.classList.add('hidden'));
+                return;
+              }
+              deselect(el, false);
+              el.classList.add('hidden');
+            })
+          } // todo: ?? else { // remove .hidden from PPs? }
         }
         e.preventDefault();
       } else if (e.keyCode === 83 && e.ctrlKey) {
@@ -564,6 +626,11 @@ ex: 0, ey: 0;
         ctx.moveTo(sx, sy);
         ctx.bezierCurveTo(cp1_1.x, cp1_1.y, cp2_1.x, cp2_1.y+tilt, m.x, m.y);
         ctx.bezierCurveTo(cp1_2.x, cp1_2.y-tilt, cp2_2.x, cp2_2.y, ex, ey);
+        ctx.stroke();
+
+        ctx.beginPath();
+        // ctx.moveTo(100, 100);
+        ctx.arc(150, 400, 300, 0.45*Math.PI, 0.55*Math.PI, false);
         ctx.stroke();
       }
 
