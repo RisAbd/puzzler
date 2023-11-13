@@ -151,15 +151,16 @@ function makePuzzlePieceDraggable(ppEl, {rotationAllowed = true, sounds = true} 
 
     // 'pp:{x}:{y}'
 
-    const errorDelta = 10;
 
     let [ppHeight, ppWidth] = ppSize();
+
+    // todo: 
+    const errorDelta = (ppHeight+ppWidth) * 0.05;
 
     const groupMembers = ppEl.parentElement
       .querySelectorAll(`[data-group="${ppEl.dataset.group}"]`);
 
-    const itGroupMembers = (groupMembers.length === 0 ? [ppEl] : Array.from(groupMembers));
-    // console.log(itGroupMembers);
+    const itGroupMembers = new Set(groupMembers.length === 0 ? [ppEl] : groupMembers);
 
     itGroupMembers.forEach(el => {
       const [_, x, y] = el.id.split(':').map(Number);
@@ -194,6 +195,7 @@ function makePuzzlePieceDraggable(ppEl, {rotationAllowed = true, sounds = true} 
 
         const siblingPP = el.parentElement.querySelector(`#pp\\:${x+dix}\\:${y+diy}`);
         if (siblingPP === null) {
+          // edge PP
           return;
         }
 
@@ -202,61 +204,65 @@ function makePuzzlePieceDraggable(ppEl, {rotationAllowed = true, sounds = true} 
         const siblingPPGroup = siblingPP.dataset.group;
         const currentPPGroup = el.dataset.group;
 
-        if (
-            siblingPPGroup
-            && currentPPGroup
-            && siblingPPGroup === currentPPGroup
-        ) {
+        if (currentPPGroup !== null && siblingPPGroup === currentPPGroup) {
+          // already in same group
           return;
         }
-        if (
+
+        if (!(
           siblingPPRotation % 360 === rotation && elRotation % 360 === rotation
           && ((Math.abs(el.offsetLeft - siblingPP.offsetLeft + hOffset)) < errorDelta)
           && ((Math.abs(el.offsetTop - siblingPP.offsetTop + vOffset)) < errorDelta)
-        ) {
-
-          if (sounds()) {
-            clutchSoundEl.stop();
-            clutchSoundEl.play();
-          }
-
-          let group;
-          if (siblingPPGroup && !currentPPGroup) {
-            group = el.dataset.group = siblingPPGroup;
-          } else if (currentPPGroup && !siblingPPGroup) {
-            group = siblingPP.dataset.group = currentPPGroup;
-          } else if (!currentPPGroup && !siblingPPGroup) {
-            group = siblingPP.dataset.group = el.dataset.group = globalGroupId++;
-          } else if (siblingPPGroup && currentPPGroup) {
-            group = siblingPPGroup;
-            itGroupMembers.forEach(el => {el.dataset.group = siblingPPGroup});
-          } else {
-            throw new Error();
-          }
-
-          selectByGroup(group);
-
-          // console.log('linked:', el.id, '+', siblingPP.id, side)
-          el.classList.add('linked');
-          siblingPP.classList.add('linked');
-
-          // el.style.top = `${siblingPP.offsetTop-vOffset}px`;
-          // el.style.left = `${siblingPP.offsetLeft-hOffset}px`;
-
-          const topOffsetToMove = numberValue(el.style.top) - (siblingPP.offsetTop-vOffset);
-          const leftOffsetToMove = numberValue(el.style.left) - (siblingPP.offsetLeft-hOffset);
-
-          siblingPP.style.zIndex = el.style.zIndex;
-          itGroupMembers.forEach(el => {
-            // el.style.zIndex = el.style.zIndex;
-            el.style.top = `${numberValue(el.style.top) - topOffsetToMove}px`;
-            el.style.left = `${numberValue(el.style.left) - leftOffsetToMove}px`;
-          });
-
-          updateProgressStats();
-        } else {
-          // console.log(`pp to ${side} not found`)
+        )) {
+          // rotation is differenct or distance is too far
+          return;
         }
+
+        // found one!
+        // console.log('linked:', el.id, '+', siblingPP.id, side)
+
+        if (sounds()) {
+          clutchSoundEl.stop();
+          clutchSoundEl.play();
+        }
+
+        let group;
+        if (siblingPPGroup && !currentPPGroup) {
+          group = el.dataset.group = siblingPPGroup;
+        } else if (currentPPGroup && !siblingPPGroup) {
+          group = siblingPP.dataset.group = currentPPGroup;
+        } else if (!currentPPGroup && !siblingPPGroup) {
+          group = siblingPP.dataset.group = el.dataset.group = globalGroupId++;
+        } else if (siblingPPGroup && currentPPGroup) {
+          group = siblingPPGroup;
+          itGroupMembers.forEach(el => {el.dataset.group = siblingPPGroup});
+        } else {
+          throw new Error();
+        }
+
+        selectByGroup(group);
+
+        el.classList.add('linked');
+        siblingPP.classList.add('linked');
+
+        const topOffsetToMove = el.offsetTop - (siblingPP.offsetTop-vOffset);
+        const leftOffsetToMove = el.offsetLeft - (siblingPP.offsetLeft-hOffset);
+
+        const maxZIndex = Math.max(+siblingPP.style.zIndex || 0, +el.style.zIndex || 0);
+
+        itGroupMembers.forEach(currentGroupPPEl => {
+          Object.assign(currentGroupPPEl.style, {
+            top: `${currentGroupPPEl.offsetTop - topOffsetToMove}px`,
+            left: `${currentGroupPPEl.offsetLeft - leftOffsetToMove}px`,
+          });
+        });
+
+        // add new elements to current group
+        Array.from(ppEl.parentElement.querySelectorAll(`[data-group="${group}"]`)).forEach(el => itGroupMembers.add(el));
+
+        itGroupMembers.forEach(el => el.style.zIndex = maxZIndex);
+
+        updateProgressStats();
       });
     });
 

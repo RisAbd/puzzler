@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8">
   <title>Clip image</title>
+  <!-- <script type="text/javascript" src="http://livejs.com/live.js"></script> -->
   <link rel="icon" type="favicon" href="https://lelkek.tk/alphabet/favicon.ico">
 
   <script src='https://unpkg.com/panzoom@9.4.0/dist/panzoom.min.js'></script>
@@ -65,6 +66,7 @@
         group: <span id="debug-group">-</span>
         selected: <span id="debug-selected">-</span><br>
         edge: <span id="debug-edge">-</span>
+        z-index: <span id="debug-z-index">-</span>
       </div>
       timer: <span id="timer">???</span>,
       progress: <span id="progress">0%</span><br>
@@ -133,9 +135,10 @@
       e.preventDefault();
     });
 
-    function _megaKek() {
+    function _megaKek({ lower = true } = {}) {
       const { ppWidth, ppHeight } = puzzlePiecesContainer.dataset;
       Array.from(puzzlePiecesContainer.children).map(el => {
+        if (lower && !el.dataset.group) return;
         const [_, i, j] = el.id.split(':').map(Number);
         el.style.setProperty('--rotation', '0deg');
         el.style.top = `${j*ppHeight}px`;
@@ -191,26 +194,33 @@
 
 
     // DEBUG values
+    const debugContainer = document.querySelector('div.debug');
+    if (window.location.hostname === 'localhost') {
+      debugContainer.style.display = 'block';
+    }
     const debugXEl = document.getElementById('debug-x');
     const debugYEl = document.getElementById('debug-y');
     const debugGroupEl = document.getElementById('debug-group');
     const debugSelectedEl = document.getElementById('debug-selected');
     const debugEdgeEl = document.getElementById('debug-edge');
+    const debugZIndexEl = document.getElementById('debug-z-index');
     gridCanvasContainer.addEventListener('mousemove', function (e) {
       if (e.target.tagName === 'IMG') { // ppEL 
-        const { id, dataset: { group }, classList } = e.target;
+        const { id, dataset: { group }, classList, style: { zIndex }, } = e.target;
         const [_, x, y] = id.split(':').map(Number);
         debugXEl.innerText = x;
         debugYEl.innerText = y;
         debugGroupEl.innerText = group || '-';
         debugSelectedEl.innerText = classList.contains('selected');
         debugEdgeEl.innerText = classList.contains('edge-piece');
+        debugZIndexEl.innerText = zIndex;
       } else {
         debugXEl.innerText = '-';
         debugYEl.innerText = '-';
         debugGroupEl.innerText = '-';
         debugSelectedEl.innerText = '-';
         debugEdgeEl.innerText = '-';
+        debugZIndexEl.innerText = '-';
       }
     });
 

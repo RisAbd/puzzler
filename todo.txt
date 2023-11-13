@@ -19,10 +19,21 @@
 	v 15) bug when moving group with hidden middle pieces that are part of edges
 16) pan behaviour (disable drag when ctrl pressed or make paning with shift or other)
 17) generate tabs with shift
-18) dragging PP in small portions gives spaces sometimes
+	v 18) dragging PP in small portions gives spaces sometimes
 	v 19) rework progress counting (count by merged edges count)
 	v 20) area select not working after some error after page refresh (hint: lastArgs is null)
 	v 21) disable ctrl+H when all edges are merged together
 	v 22) add debug section
 	v 23) restore not working sometimes (load of document)
 24) rework puzzle generation moment when selecting image
+25) sound not working sometimes
+26) remove state if completed??
+27) add multiple saves
+28) save large images
+29) controls over generating shapes
+30) show all pieces again if switched to only edges after completing all edges. Now ctrl+H disables switching back
+31) check snap distance if it counts pp sizes
+32) deselect at pp click without move not working
+	v 33) remove debug stats by hostname
+34) PP image blured when in wrong orientation (works as some kind of tip, very annoying) (hint from Sergei: transform3d(x, y, z = 0)) (https://stackoverflow.com/questions/23871507/css-transforms-why-does-a-simple-rotation-make-the-image-blurry)
+35) click at nearest pp should translated on it (rotation)

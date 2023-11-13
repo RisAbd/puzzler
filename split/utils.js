@@ -165,7 +165,7 @@ function rotateCells(center, centerRotation, cells, ppHeight, ppWidth) {
 
   [ppWidth, ppHeight] = [ppHeight, ppWidth];
   const newRotation = centerRotation + 90;
-  console.log()
+  
   m.forEach((l, j) => {
     l.forEach((item, i) => {
       if (item === null) return;

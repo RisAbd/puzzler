@@ -316,6 +316,7 @@ input#sounds:checked + label[for="sounds"]::after {
   border: 1px solid white;
   padding: 3px;
   opacity: 0.7;
+  display: none;
 }
 #game-stats > .debug > span {
   color: red;
