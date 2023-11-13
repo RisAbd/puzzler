@@ -48,6 +48,9 @@ function cutImageToPieces({ seedString } = {}) {
 
   puzzlePiecesContainer.classList.remove('show-edge-pieces');
 
+  globalPPZIndex = 2;
+  globalGroupId = 1;
+
   const { width: screenWidth, height: screenHeight } = window.screen;
 
 
@@ -67,7 +70,7 @@ function cutImageToPieces({ seedString } = {}) {
 
   const sounds = () => controlsForm.querySelector('input[name="sounds"]').checked ? true : false;
 
-  const { bgColor, rotationAllowed, width: gw, height: gh } = getControlsValues();
+  const { bgColor, rotationAllowed, width: gw, height: gh, tabType } = getControlsValues();
   setBgColor(bgColor);
 
   const ctx = gridCanvas.getContext('2d');
@@ -92,8 +95,79 @@ function cutImageToPieces({ seedString } = {}) {
 
   const randomShift = (m = tabVarHeight) => Math.round(random() * m - (m/2));
 
+  function genPuzzleSideWithRectTab(s, e, sideAxis, dir, th, size, tilt) {
+
+    const {x: sx, y: sy} = s, {x: ex, y: ey} = e;
+    dir = (dir === 1) ? -1 : 1;
+  
+    const widthToTab = 0.4;
+    const scatterRatio = 0.3
+
+    const dx = ex-sx, dy = ey-sy;
+    const r = () => Math.max(Math.abs(dy), Math.abs(dx))*widthToTab*scatterRatio*(random()-0.5);
+    const p1 = {x: sx+dx*widthToTab, y: sy+dy*widthToTab};
+    let p2, p3, p4;
+    if (sideAxis === 1) {
+      p2 = {x: p1.x, y: p1.y+(dir*th)};
+      p3 = {x: ex-dx*widthToTab, y: p2.y};
+      p4 = {x: p3.x, y: ey-dy*widthToTab};
+    } else {
+      p2 = {x: p1.x+(dir*th), y: p1.y};
+      p3 = {x: p2.x, y: ey-dy*widthToTab};
+      p4 = {x: ex-dx*widthToTab, y: p3.y};
+    }
+    [p1, p2, p3, p4].forEach(p => {
+      p.x += r(); p.y += r();
+    });
+    return [line(s, p1), line(p1, p2), line(p2, p3), line(p3, p4), line(p4, e)];
+  }
+
+  function genPuzzleSideLightningTab(s, e, sideAxis, dir, th, size, tilt) {
+
+    const {x: sx, y: sy} = s, {x: ex, y: ey} = e;
+    dir = (dir === 1) ? -1 : 1;
+  
+    const widthToTab = 0.3;
+    const scatterRatio = 0.3
+
+    const dx = ex-sx, dy = ey-sy;
+    const r = () => Math.max(Math.abs(dy), Math.abs(dx))*widthToTab*scatterRatio*(random()-0.5);
+    const p1 = {x: sx+dx*widthToTab, y: sy+dy*widthToTab};
+    let p2, p3, p4;
+    if (sideAxis === 1) {  // horizontal
+      p2 = {x: sx+dx/2, y: p1.y+(dir*th)};
+      p3 = {x: p2.x, y: sy+dy/2-(dir*th)};
+      p4 = {x: ex-dx*widthToTab, y: ey-dy*widthToTab};
+    } else {  // vertical
+      p2 = {x: p1.x+(dir*th), y: sy+dy/2};
+      p3 = {x: sx+dx/2-(dir*th), y: p2.y};
+      p4 = {x: ex-dx*widthToTab, y: ey-dy*widthToTab};
+    }
+    [p1, p2, p3, p4].forEach(p => {
+      p.x += r(); p.y += r();
+    });
+    return [line(s, p1), line(p1, p2), line(p2, p3), line(p3, p4), line(p4, e)];
+  }
+  
+  const TAB_TYPE_GEN_FUNCS = {
+    normal: genPuzzleSide,
+    square: genPuzzleSideWithRectTab,
+    lightning: genPuzzleSideLightningTab,
+  };
+  // todo: make multiple choices
+  let genFuncs;
+  if (tabType === 'random') {
+    const gfs = Object.values(TAB_TYPE_GEN_FUNCS)
+    genFuncs = [gfs[Math.floor(random() * gfs.length)]]
+  } else if (tabType in TAB_TYPE_GEN_FUNCS) {
+    genFuncs = [TAB_TYPE_GEN_FUNCS[tabType]];
+  } else {
+    console.warn(`"${tabType}" PP generation function is not available, fallback to "normal"`);
+    genFuncs = [TAB_TYPE_GEN_FUNCS.normal];
+  }
   function side(t, s, e, ci, cj) {
     if (
+      // true ||
       (t === 'top' && cj === 0)
       || (t === 'right' && ci === gw-1)
       || (t === 'bottom' && cj === gh-1)
@@ -107,7 +181,8 @@ function cutImageToPieces({ seedString } = {}) {
     const minTabHeightK = 0.8;
     const th = tabHeight * minTabHeightK + (random() * (1.0 - minTabHeightK) * tabHeight);
     const tilt = (random() < 0.5 ? -1 : 1) * (random() * (th/3))
-    return genPuzzleSide(s, e, sideAxis, direction, th, size, tilt);
+    const gf = genFuncs[Math.floor(random()*genFuncs.length)]
+    return gf(s, e, sideAxis, direction, th, size, tilt);
   }
 
   function _recKek(o, f, k = undefined, p = undefined, i = 0) {
@@ -181,22 +256,24 @@ function cutImageToPieces({ seedString } = {}) {
 
   for (let j = 0; j < gh; j++) {
     for (let i = 0; i < gw; i++) {
+      // const rs = () => 0; 
+      const rs = randomShift;
       const points = pointsCache[`${i}:${j}`] = {
         topLeft: {
-          x: i*gridCellWidth+(i === 0 ? 0 : randomShift()),
-          y: j*gridCellHeight+(j === 0 ? 0 : randomShift()),
+          x: i*gridCellWidth+(i === 0 ? 0 : rs()),
+          y: j*gridCellHeight+(j === 0 ? 0 : rs()),
         },
         topRight: {
-          x: (i+1)*gridCellWidth+(i === gw-1 ? 0 : randomShift()),
-          y: j*gridCellHeight+(j === 0 ? 0 : randomShift()),
+          x: (i+1)*gridCellWidth+(i === gw-1 ? 0 : rs()),
+          y: j*gridCellHeight+(j === 0 ? 0 : rs()),
         },
         bottomRight: {
-          x: (i+1)*gridCellWidth+(i === gw-1 ? 0 : randomShift()),
-          y: (j+1)*gridCellHeight+(j === gh-1 ? 0 : randomShift()),
+          x: (i+1)*gridCellWidth+(i === gw-1 ? 0 : rs()),
+          y: (j+1)*gridCellHeight+(j === gh-1 ? 0 : rs()),
         },
         bottomLeft: {
-          x: i*gridCellWidth+(i === 0 ? 0 : randomShift()),
-          y: (j+1)*gridCellHeight+(j === gh-1 ? 0 : randomShift()),
+          x: i*gridCellWidth+(i === 0 ? 0 : rs()),
+          y: (j+1)*gridCellHeight+(j === gh-1 ? 0 : rs()),
         },
       };
       if (i > 0) {

@@ -160,7 +160,7 @@ function makePuzzlePieceDraggable(ppEl, {rotationAllowed = true, sounds = true} 
     const groupMembers = ppEl.parentElement
       .querySelectorAll(`[data-group="${ppEl.dataset.group}"]`);
 
-    const itGroupMembers = new Set(groupMembers.length === 0 ? [ppEl] : groupMembers);
+    const itGroupMembers = Array.from(groupMembers.length === 0 ? [ppEl] : groupMembers);
 
     itGroupMembers.forEach(el => {
       const [_, x, y] = el.id.split(':').map(Number);
@@ -204,7 +204,7 @@ function makePuzzlePieceDraggable(ppEl, {rotationAllowed = true, sounds = true} 
         const siblingPPGroup = siblingPP.dataset.group;
         const currentPPGroup = el.dataset.group;
 
-        if (currentPPGroup !== null && siblingPPGroup === currentPPGroup) {
+        if (currentPPGroup && siblingPPGroup === currentPPGroup) {
           // already in same group
           return;
         }
@@ -258,7 +258,7 @@ function makePuzzlePieceDraggable(ppEl, {rotationAllowed = true, sounds = true} 
         });
 
         // add new elements to current group
-        Array.from(ppEl.parentElement.querySelectorAll(`[data-group="${group}"]`)).forEach(el => itGroupMembers.add(el));
+        itGroupMembers.push(...Array.from(ppEl.parentElement.querySelectorAll(`[data-group="${group}"]`)).filter(el => !itGroupMembers.includes(el)));
 
         itGroupMembers.forEach(el => el.style.zIndex = maxZIndex);
 

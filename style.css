@@ -295,7 +295,39 @@ input#sounds:checked + label[for="sounds"]::after {
   content: "🔔";
   background-color: white;
 }
-
+#controls {
+  user-select: none;
+}
+#controls > label.tab-type {
+  margin: 0 3px;
+}
+#controls > label.tab-type > span {
+  color: #959595;
+  font-weight: bold;
+  font-size: 20px;
+  padding: 3px 5px;
+  box-sizing: content-box;
+  border-radius: 5px;
+  border: 1px solid lightgray;
+}
+#controls > label.tab-type > input {
+  display: none;
+}
+#controls > label.tab-type:hover > span {
+  box-shadow:
+      0 0 1px blue,
+      0 0 3px cyan,
+      inset 0 0 1px cyan;
+}
+#controls > label.tab-type > input:checked + span  {
+  color: white;
+  border-color: white;
+  text-shadow:
+      0 0 1px blue,
+      0 0 2px blue,
+      0 0 3px cyan,
+      0 0 5px cyan;
+}
 
 #game-stats {
   pointer-events: none;

@@ -26,9 +26,10 @@
         <input type="number" name="height" value="5">
       </label>
       <hr>
-      <label>scale:
-        <input name="puzzle-scale" type="range" min="0.3" max="1.0" step="0.05" value="0.6">
-      </label>
+      <label class="tab-type"><input name="tab-type" type="radio" value="normal" checked><span>normal</span></label>
+      <label class="tab-type"><input name="tab-type" type="radio" value="square"><span>square</span></label>
+      <label class="tab-type"><input name="tab-type" type="radio" value="lightning"><span>lightning</span></label>
+      <label class="tab-type"><input name="tab-type" type="radio" value="random"><span>?</span></label>
       <hr>
       <label>allow rotation:
         <input type="checkbox" checked name="allow-rotation">
@@ -461,13 +462,15 @@
         height: +controlsForm["height"].value,
         bgColor: controlsForm["bg-color"].value,
         rotationAllowed: controlsForm["allow-rotation"].checked,
+        tabType: controlsForm["tab-type"].value,
       };
     }
-    function setControlsValues({ width, height, rotationAllowed, bgColor }) {
+    function setControlsValues({ width, height, rotationAllowed, bgColor, tabType, }) {
       controlsForm["width"].value = width;
       controlsForm["height"].value = height;
       controlsForm["bg-color"].value = bgColor;
       controlsForm["allow-rotation"].checked = rotationAllowed;
+      controlsForm["tab-type"].value = tabType;
     }
 
     // imgEl.addEventListener('load', cutImageToPieces);
