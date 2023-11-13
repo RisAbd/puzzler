@@ -7,7 +7,7 @@
 	v 3.c) and globalGroup counter and zIndex and globalZIndex counter...
 	v 4) show saving process
 	v 5) debounce on area select - (kind of done)
-6) group when merging two groups (now requires two clicks)
+	v 6) group when merging two groups (now requires two clicks)
 7) human controls
 	v 8) show time and stats (progress)
 9) log movements (to show some graphs later)
@@ -27,11 +27,11 @@
 	v 23) restore not working sometimes (load of document)
 24) rework puzzle generation moment when selecting image
 25) sound not working sometimes
-26) remove state if completed??
+26) remove saved state if completed??
 27) add multiple saves
 28) save large images
 29) controls over generating shapes
-30) show all pieces again if switched to only edges after completing all edges. Now ctrl+H disables switching back
+	v 30) show all pieces again if switched to only edges after completing all edges. Now ctrl+H disables switching back
 31) check snap distance if it counts pp sizes
 32) deselect at pp click without move not working
 	v 33) remove debug stats by hostname

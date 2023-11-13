@@ -130,6 +130,12 @@
       }, {total:0, grouped:0});
       progressStatsEl.innerText = `${Math.round(grouped / total * 10000) / 100}% (${grouped}/${total})`;
     }
+    function checkHideEdges() {
+      const edgePPsGroups = new Set(Array.from(puzzlePiecesContainer.querySelectorAll('img.edge-piece')).map(el => el.dataset.group));
+      if (!edgePPsGroups.has(undefined) && edgePPsGroups.size == 1) {
+        puzzlePiecesContainer.classList.remove('show-edge-pieces');
+      }
+    }
 
     gridCanvasContainer.addEventListener('contextmenu', (e) => {
       e.preventDefault();

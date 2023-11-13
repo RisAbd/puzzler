@@ -263,6 +263,7 @@ function makePuzzlePieceDraggable(ppEl, {rotationAllowed = true, sounds = true} 
         itGroupMembers.forEach(el => el.style.zIndex = maxZIndex);
 
         updateProgressStats();
+        checkHideEdges();
       });
     });
 
